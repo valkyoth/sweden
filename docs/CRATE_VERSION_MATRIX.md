@@ -1,6 +1,6 @@
 # Crate Version Matrix
 
-Status: `v0.1.0` implementation foundation; awaiting maintainer pentest
+Status: `v0.1.0` pentest remediation; awaiting maintainer retest
 
 Sweden uses independent crate versions. The `sweden` facade is the release
 clock and always has exactly the version represented by the repository tag.

@@ -28,3 +28,5 @@ Semantic Versioning for each independently published crate.
 - No agency or transport crate is present, so no source or network capability is
   claimed.
 - Response sizes require explicit budgets.
+- Source descriptors reject a stable status paired with unreviewed access and
+  expose metadata only through invariant-preserving construction and accessors.

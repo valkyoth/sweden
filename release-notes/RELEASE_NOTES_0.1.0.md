@@ -1,6 +1,6 @@
 # Sweden 0.1.0 Release Notes
 
-Status: implementation foundation; awaiting maintainer pentest
+Status: pentest remediation; awaiting maintainer retest
 
 ## Scope
 
@@ -29,6 +29,8 @@ converge to `1.0.0`.
 - No network, TLS, credential, parser, cache, or hosted relay implementation.
 - Explicit response-budget validation is present in `sweden-core`.
 - Publishing requires an exact tag check when invoked with `--require-tag`.
+- Source descriptors prevent contradictory stable/unreviewed metadata and use
+  private, forward-compatible fields.
 
 ## Verification Required
 

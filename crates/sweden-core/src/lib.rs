@@ -7,7 +7,10 @@
 pub struct SourceId(&'static str);
 
 impl SourceId {
-    /// Creates a source identifier from a reviewed static value.
+    /// Creates a source identifier from a process-reviewed static value.
+    ///
+    /// This constructor records a review decision; identifier syntax
+    /// validation is introduced by the identifier milestone.
     #[must_use]
     pub const fn reviewed(value: &'static str) -> Self {
         Self(value)
@@ -50,15 +53,62 @@ pub enum IntegrationStatus {
 
 /// Static metadata shared by agency crates and the facade.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct SourceDescriptor {
-    /// Canonical source identifier.
-    pub id: SourceId,
-    /// Human-readable authority or platform name.
-    pub display_name: &'static str,
-    /// Broad source access class.
-    pub access: AccessClass,
-    /// Current evidence-backed implementation state.
-    pub status: IntegrationStatus,
+    id: SourceId,
+    display_name: &'static str,
+    access: AccessClass,
+    status: IntegrationStatus,
+}
+
+impl SourceDescriptor {
+    /// Creates reviewed source metadata when its access and status agree.
+    ///
+    /// A stable integration cannot retain the fail-closed
+    /// [`AccessClass::ReviewRequired`] access state.
+    #[must_use]
+    pub const fn new(
+        id: SourceId,
+        display_name: &'static str,
+        access: AccessClass,
+        status: IntegrationStatus,
+    ) -> Option<Self> {
+        if matches!(status, IntegrationStatus::Stable)
+            && matches!(access, AccessClass::ReviewRequired)
+        {
+            return None;
+        }
+        Some(Self {
+            id,
+            display_name,
+            access,
+            status,
+        })
+    }
+
+    /// Returns the canonical source identifier.
+    #[must_use]
+    pub const fn id(self) -> SourceId {
+        self.id
+    }
+
+    /// Returns the reviewed human-readable authority or platform name.
+    #[must_use]
+    pub const fn display_name(self) -> &'static str {
+        self.display_name
+    }
+
+    /// Returns the broad source access class.
+    #[must_use]
+    pub const fn access(self) -> AccessClass {
+        self.access
+    }
+
+    /// Returns the evidence-backed integration state.
+    #[must_use]
+    pub const fn status(self) -> IntegrationStatus {
+        self.status
+    }
 }
 
 /// A transport-neutral HTTP method.
@@ -73,6 +123,7 @@ pub enum Method {
 
 /// Explicit limits for an upstream response.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct ResponseBudget {
     max_wire_bytes: u64,
     max_decoded_bytes: u64,
@@ -106,7 +157,7 @@ impl ResponseBudget {
 
 #[cfg(test)]
 mod tests {
-    use super::{ResponseBudget, SourceId};
+    use super::{AccessClass, IntegrationStatus, ResponseBudget, SourceDescriptor, SourceId};
 
     #[test]
     fn source_id_preserves_reviewed_value() {
@@ -129,5 +180,44 @@ mod tests {
             assert_eq!(value.max_wire_bytes(), 1_024);
             assert_eq!(value.max_decoded_bytes(), 4_096);
         }
+    }
+
+    #[test]
+    fn source_descriptor_rejects_stable_unreviewed_access() {
+        let descriptor = SourceDescriptor::new(
+            SourceId::reviewed("trafikverket"),
+            "Trafikverket",
+            AccessClass::ReviewRequired,
+            IntegrationStatus::Stable,
+        );
+        assert_eq!(descriptor, None);
+    }
+
+    #[test]
+    fn source_descriptor_allows_fail_closed_foundation() {
+        let descriptor = SourceDescriptor::new(
+            SourceId::reviewed("trafikverket"),
+            "Trafikverket",
+            AccessClass::ReviewRequired,
+            IntegrationStatus::Foundation,
+        );
+        assert!(descriptor.is_some());
+        if let Some(value) = descriptor {
+            assert_eq!(value.id().as_str(), "trafikverket");
+            assert_eq!(value.display_name(), "Trafikverket");
+            assert_eq!(value.access(), AccessClass::ReviewRequired);
+            assert_eq!(value.status(), IntegrationStatus::Foundation);
+        }
+    }
+
+    #[test]
+    fn source_descriptor_allows_stable_reviewed_access() {
+        let descriptor = SourceDescriptor::new(
+            SourceId::reviewed("trafikverket"),
+            "Trafikverket",
+            AccessClass::OpenRegistered,
+            IntegrationStatus::Stable,
+        );
+        assert!(descriptor.is_some());
     }
 }
