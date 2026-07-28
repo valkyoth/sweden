@@ -32,4 +32,18 @@ for target in \
     rustup run 1.97.1 cargo check -p sweden --target "$target" --all-features
 done
 
-echo "v0.1.0 implementation stop reached; run the maintainer pentest and update security/pentest/v0.1.0.md"
+pentest_status="$(
+    sed -n 's/^Status: //p' security/pentest/v0.1.0.md |
+        head -n 1
+)"
+case "$pentest_status" in
+"PASS")
+    echo "v0.1.0 release gate passed with pentest PASS; commit and wait for GitHub"
+    ;;
+"FINDINGS OPEN")
+    echo "v0.1.0 remediation gate passed; wait for the maintainer retest"
+    ;;
+*)
+    echo "v0.1.0 implementation stop reached; run the maintainer pentest"
+    ;;
+esac

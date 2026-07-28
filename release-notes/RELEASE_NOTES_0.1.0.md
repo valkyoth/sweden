@@ -1,6 +1,6 @@
 # Sweden 0.1.0 Release Notes
 
-Status: pentest remediation; awaiting maintainer retest
+Status: release candidate; pentest passed; awaiting GitHub
 
 ## Scope
 
@@ -10,8 +10,8 @@ documentation, and release-planning baseline.
 
 ## Crates
 
-- `sweden`
 - `sweden-core`
+- `sweden`
 
 Both crates are intended for crates.io. Future crates are created and published
 only when their implementation milestone begins.
@@ -41,10 +41,10 @@ cargo deny check
 cargo audit
 ```
 
-The implementation and `AWAITING PENTEST` report form the exact pentest
-baseline commit. Record findings or a clean result in
-`security/pentest/v0.1.0.md`; fix and retest findings; commit the `PASS` outcome
-and any remediation; then wait for GitHub to become green.
+The implementation baseline and source-descriptor remediation passed the
+maintainer pentest and retest. The permanent report is `Status: PASS`. This
+release now waits for green GitHub Actions and CodeQL default setup; tagging
+still requires an explicit maintainer request.
 
 ## Known Limitations
 

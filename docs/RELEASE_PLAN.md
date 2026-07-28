@@ -1,6 +1,6 @@
 # Sweden Release Plan To 1.0
 
-Status: planning document; `v0.1.0` repository foundation in implementation
+Status: planning document; `v0.1.0` pentest passed; awaiting GitHub
 
 This plan is deliberately granular. Each version is one bounded review and
 pentest pass. Split a version or add a patch release whenever its scope stops
