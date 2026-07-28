@@ -1,0 +1,17 @@
+[release]
+version = "0.1.0"
+policy = "independent"
+
+[crates."sweden-core"]
+previous_version = "0.0.0"
+version = "0.1.0"
+change = "code"
+publish = true
+reason = "Initial dependency-free shared contracts."
+
+[crates.sweden]
+previous_version = "0.0.0"
+version = "0.1.0"
+change = "code"
+publish = true
+reason = "Initial dependency-free facade over sweden-core."

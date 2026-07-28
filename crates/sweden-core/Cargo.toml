@@ -1,0 +1,18 @@
+[package]
+name = "sweden-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Dependency-free no_std contracts for the Sweden public API ecosystem"
+readme = "README.md"
+keywords = ["sweden", "api", "no-std", "public-data"]
+categories = ["api-bindings", "no-std"]
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
