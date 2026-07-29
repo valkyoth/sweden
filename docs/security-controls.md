@@ -25,8 +25,12 @@
 - decoded-name duplicate detection for JSON and explicit XML 1.0 lexical,
   QName, namespace, comment, CDATA, processing-instruction, declaration, and
   reference-digit budgets;
-- non-escaping borrowed `EventSink` callbacks and composite wire, codec, and
-  source-semantic completion before `Complete` provenance;
+- non-escaping borrowed `EventSink` callbacks with closed
+  continue/pause/stop/abort decisions, safe error collapse, and no completion
+  after pause/stop/abort/panic;
+- structural completion vocabulary in core, with private producer-owned HTTP
+  wire, codec-specific, registry-semantic, and executor-final witnesses before
+  `Complete` provenance;
 - archive traversal and decompression-ratio controls where applicable;
 - no-panic arbitrary input evidence.
 
@@ -42,9 +46,13 @@
   finalization;
 - non-downgradable compiled-expiry or current-authority freshness revalidated
   immediately before credentials/I/O and after waits, redirects, and pages;
+- registry-owned opaque freshness epochs and privately bound non-serializable
+  authority observations; restart, reset/wrap, or mismatch re-observes or
+  denies;
 - distinct authorization, policy-revalidated, quota-reserved,
-  credential-injected, and attempt-in-flight states, with attempt commitment
-  only at transport handoff;
+  credential-injected, attempt-committed, and attempt-in-flight states;
+- authority-local quota commit before the external transport call, with the
+  intervening crash gap conservatively spending the attempt;
 - explicit deadline mode, retries, and rate budgets without claiming a clock
   can preempt a stalled transport;
 - complete reviewed interval/window/concurrency enforcement and fenced lease
@@ -62,7 +70,10 @@
 - fail-closed rejection of personal or sensitive body recording;
 - source, operation, schema, policy/evidence, retrieval, classification, and
   redistribution metadata;
-- replay rejection after expiry or any operation/evidence mismatch.
+- `ConformanceReplay` rejection after expiry or any operation/evidence
+  mismatch;
+- type-distinct `ConformanceReplay` and untrusted `CorpusReplay`; corpus mode
+  cannot authorize I/O, current provenance, caches, or checkpoints.
 
 ## Required Before Hosted Multi-Tenancy
 

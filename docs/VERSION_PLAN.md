@@ -40,8 +40,8 @@ replace the established product scope, crate policy, or release gate.
 | Source-independent policy and source-specific registry ownership | policy at `0.7.0`, `sweden-registry` at `0.9.0` | generation at `0.20.0`, DAG/ownership audit at `0.45.0` |
 | Indivisible encoder/decoder/validator/output authorization | `AuthorizedExecution<R>` at `0.9.0`, executor consumption at `0.21.0` | substitution attacks at `0.21.0`/`0.45.0`, stabilization at `0.54.0` |
 | Registry evolution, feature alignment, and version-skew denial | `0.9.0`, production entry at `0.24.0` | `0.43.0`, `0.45.0`, `0.98.0` |
-| Time-of-use freshness and qualified offline invalidation | freshness modes at `0.9.0`, executor revalidation at `0.21.0` | live retry/page checks at `0.37.0`, audits at `0.48.0`, `0.54.0`, `0.97.0` |
-| Authorization, quota, credential, and in-flight state separation | state model at `0.21.0` | full two-phase lease at `0.37.0`, audits at `0.45.0`, `0.46.0`, `0.52.0` |
+| Time-of-use freshness, clock-epoch-bound observations, and qualified offline invalidation | freshness/epoch types at `0.9.0`, executor revalidation at `0.21.0` | live retry/restart checks at `0.37.0`, audits at `0.48.0`, `0.54.0`, `0.97.0` |
+| Authorization, quota, credential, committed, and in-flight state separation | state model and conservative commit/call gap at `0.21.0` | full two-phase lease at `0.37.0`, audits at `0.45.0`, `0.46.0`, `0.52.0`, `0.91.0` |
 | Payload-free validation and one shared operation path | `0.2.0`, `0.4.0`, `0.5.0` | `0.39.0`, `0.56.0`, `0.57.0` |
 | Consumable pre-charged resource ledgers | `0.3.0`, `0.12.0`, parser and paging milestones | `0.52.0`, `0.56.0`, `0.94.0` |
 | Local ledgers versus coordinated quota authority | ledgers at `0.3.0`, minimal authority contract at `0.9.0`, dry-run executor use at `0.21.0` | algorithms and lease lifecycle at `0.37.0`/`0.48.0`, topology proof at `0.52.0`/`0.91.0` |
@@ -58,8 +58,9 @@ replace the established product scope, crate policy, or release gate.
 | Honest deadline/preemption modes | contract at `0.11.0`, executor propagation at `0.21.0` | retry integration at `0.37.0`, hostile trust audit at `0.53.0` |
 | Honest trusted-transport boundary | `0.10.0`, `0.21.0`, `0.23.0` | `0.53.0`, `0.58.0` |
 | Provisional versus finalized streaming | `0.12.0`, `0.21.0` | checkpoint/cache enforcement at `0.36.0`, `0.38.0` |
-| Realizable borrowed visitor and composite completion | `EventSink` and completion tokens at `0.12.0`, JSON/XML use at `0.14.0`/`0.17.0`, semantic composition at `0.21.0` | constrained examples at `0.56.0`, final parser audits at `0.92.0`/`0.93.0` |
-| Dossier-gated fixture retention and replay | `0.19.0`, generator support at `0.20.0` | documentation at `0.43.0`, security/completeness audits at `0.50.0`/`0.59.0` |
+| Producer-owned completion witnesses without friend-crate claims | HTTP wire witness at `0.12.0`, JSON/XML witnesses at `0.14.0`/`0.17.0`, registry semantic and executor final witnesses at `0.21.0` | hostile ownership audit at `0.45.0`, stabilization at `0.54.0` |
+| Realizable borrowed visitor, closed sink control, and callback trust | `EventSink` continue/pause/stop/abort at `0.12.0`, executor behavior at `0.21.0` | trust audit at `0.53.0`, constrained examples at `0.56.0`, parser audits at `0.92.0`/`0.93.0` |
+| Dossier-gated fixture retention and distinct conformance/corpus replay | `0.19.0`, generator support at `0.20.0` | documentation at `0.43.0`, security/completeness audits at `0.50.0`/`0.59.0`, final corpus runs at `0.92.0`/`0.93.0` |
 | Collision-safe pagination history | `0.28.0` | ledger audit at `0.52.0`, recovery at `0.70.0` |
 | Exact calendar windows and non-refunding 429 handling | `0.37.0` | redirect/retry audit at `0.47.0`, quota audit at `0.48.0`, topology proof at `0.91.0` |
 | Adversarial URL canonicalization corpus | request/origin rules at `0.5.0`/`0.6.0` | redirect state machine at `0.47.0`, security review at `0.50.0` |

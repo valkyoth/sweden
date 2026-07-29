@@ -15,9 +15,15 @@ Rules:
 - `sweden-registry` owns generated source-specific entries and may depend
   one-way on a selected agency or conformance crate behind a matching feature;
   source crates never depend back on the registry.
+- `sweden-registry` also owns opaque freshness epochs and privately binds
+  caller-authority state into non-serializable epoch-specific observations.
 - `sweden-executor` owns generic execution only. Synthetic operation,
   encoder, decoder, validator, fixture, and output semantics live in the
   separate `sweden-conformance` crate.
+- `sweden-core` owns structural completion traits/status only.
+  `sweden-http` owns the opaque wire witness, each codec owns its own opaque
+  syntax witness, `sweden-registry` owns semantic-witness construction through
+  the bound validator, and `sweden-executor` alone owns finalization/provenance.
 - Transport crates do not own agency semantics.
 - `lib.rs` and binary entry points remain orchestration.
 - Parsing, validation, policy, generated models, hand-written facades, tests,

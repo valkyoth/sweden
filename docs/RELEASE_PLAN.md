@@ -355,6 +355,13 @@ Deliverables:
   Trustworthy current time is mandatory; authority-backed observations bind
   the registry/policy identity and use monotonic time to enforce staleness.
   Callers may strengthen but never downgrade the registered requirement.
+- For 1.0, `sweden-registry` owns opaque `FreshnessEpoch` and privately
+  constructs non-serializable `AuthorityObservation<'epoch>` after invoking
+  and validating the caller's descriptive `PolicyAuthority` state. Restart,
+  counter reset/wrap, epoch mismatch, or attempting to reuse cached state in a
+  new session requires a fresh authority observation or fails closed.
+  Persisted observations remain unadmitted without a future authenticated
+  absolute-expiry and monotonic authority-sequence design.
 - Minimal stable `MonotonicClock`, `UtcClock`, `QuotaAuthority`, and
   `PolicyAuthority` contract shapes required by the later executor; algorithms
   and calendar/retry stabilization remain at `v0.37.0`.
@@ -382,7 +389,8 @@ Verification:
 - Inherited gate plus missing/contradictory provenance, forged capability,
   wrong-plan/environment/origin, stale digest, rollback, expiry, kill-switch,
   authorization-reuse, freshness-downgrade, unavailable-time, stale-authority,
-  and wrong-registry authority tests.
+  wrong-registry authority, counter reset/wrap, epoch mismatch, restart with a
+  cached observation, and serialization-attempt compile-fail tests.
 - Hostile downstream test package that invents IDs/origins/operations,
   implements the public contract, constructs dossier-shaped data, and attempts
   to forge an authorized execution, register an unreviewed plan, or substitute
@@ -469,13 +477,20 @@ Deliverables:
   and truncation detection.
 - Add the shared `no_std` borrowed-stream vocabulary to `sweden-core`, using
   `EventFamily::Event<'event>` and
-  `EventSink<F>::on_event<'event>(F::Event<'event>)`. Decoder `push`/`finish`
-  invokes the synchronous visitor before returning, so the borrow cannot
-  escape. Async transports may invoke it while processing a chunk, but no
-  borrowed `Stream<Item = _>` is promised.
-- Separate non-forgeable `WireComplete`, `CodecComplete`, and
-  `SemanticComplete` states. Only their registry-bound combination can
-  construct final completion and `Complete` provenance.
+  `EventSink<F>::on_event<'event>(F::Event<'event>) -> SinkControl`.
+  `SinkControl` is a closed `Continue`, `Pause`, `StopEarly`, or
+  `Abort(SafeSinkCode)` decision.
+- `Pause` returns bounded resumable provisional state without accepting the
+  next event. `StopEarly`, sink abort, callback panic, and cancellation remain
+  incomplete and cannot create cache/checkpoint/provenance completion.
+- Arbitrary sink errors are collapsed immediately to `SafeSinkCode` and never
+  retained as `Error::source()`. Callbacks are trusted caller code: they may
+  copy data, block, panic, or consume arbitrary CPU, and portable `no_std`
+  Sweden cannot catch their panic or guarantee isolation.
+- `sweden-core` owns structural completion traits/status only.
+  `sweden-http` privately constructs opaque `WireComplete` after exact body,
+  trailer, and transport completion; downstream crates cannot call its
+  constructor.
 - No cache insertion, checkpoint/cursor advance, or `Complete` provenance from
   provisional events.
 - Explicit caller warning that acting on provisional events transfers
@@ -498,13 +513,18 @@ Verification:
   counter-overflow, valid-prefix/malformed-trailer, duplicate-late-field, and
   valid-prefix/truncation tests.
 - Compile tests proving a borrowed event cannot escape `on_event`, plus
-  forged/missing/reordered wire, codec, and semantic completion tests.
+  every sink decision, pause/resume, stop/abort provisional behavior, safe
+  error collapse, and forged `WireComplete` construction tests.
+- Panic and never-returning callbacks run in a bounded subprocess/watchdog;
+  tests document that attempt and concurrency handling depends on whether the
+  callback runs before or after attempt commit and whether unwinding occurs.
 
 Exit criteria:
 
 - No decoder can receive bytes that bypass the declared response budget, and
-  wire and decoded ceilings remain independently configurable. `Complete`
-  provenance requires all three completion domains.
+  wire and decoded ceilings remain independently configurable. Only
+  `sweden-http` can produce wire completion, and no sink outcome alone can
+  create final provenance.
 - `v0.12.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.13.0 - JSON Lexical Layer
@@ -551,9 +571,9 @@ Deliverables:
 - Borrowed `EventSink` callbacks with caller scratch for decoded strings; an
   event cannot outlive its callback. Retention requires the bounded owned
   `alloc` path.
-- Mandatory `finish()` returning `CodecComplete` only after exact complete
-  structure validation; it cannot manufacture wire or source-semantic
-  completion.
+- Mandatory `finish()` privately constructing opaque `JsonComplete` only
+  after exact complete structure validation. It cannot manufacture
+  `WireComplete`, `XmlComplete`, semantic completion, or final provenance.
 - Source-decoder hooks.
 
 Verification:
@@ -563,6 +583,7 @@ Verification:
   fixtures, scratch exhaustion, re-decode work exhaustion, and token-budget
   exhaustion tests.
 - Compile-fail borrowed-event escape tests and callback re-entry/abort tests.
+- Hostile construction and cross-codec substitution tests for `JsonComplete`.
 
 Exit criteria:
 
@@ -647,13 +668,15 @@ Deliverables:
   reserved-prefix enforcement, exact-consumption, and duplicate singleton
   policy.
 - The same non-escaping borrowed `EventSink` interface as JSON.
-- Mandatory `finish()` returning `CodecComplete` only after closing every
-  element and consuming the complete document.
+- Mandatory `finish()` privately constructing opaque `XmlComplete` only after
+  closing every element and consuming the complete document. It cannot
+  manufacture `WireComplete`, `JsonComplete`, semantic completion, or final
+  provenance.
 
 Verification:
 
 - Inherited gate plus mismatched tags, namespace shadowing, deep input, repeated
-  singleton, and budget tests.
+  singleton, budget, hostile-construction, and cross-codec substitution tests.
 
 Exit criteria:
 
@@ -698,8 +721,15 @@ Deliverables:
 - Fixture metadata binds source, operation, schema, policy/evidence version,
   retrieval date, data classification, and the reviewed retention and
   redistribution decision.
-- Replay rejects an expired fixture, stale evidence, wrong source/operation,
-  schema or policy mismatch, and any classification/redistribution conflict.
+- Separate replay modes with no implicit conversion:
+  `ConformanceReplay` rejects expired evidence, wrong source/operation, schema
+  or policy mismatch, and classification/redistribution conflicts;
+  `CorpusReplay` accepts only synthetic or lawfully retained historical bytes
+  as untrusted parser/mutation input and discards authority-bearing metadata.
+- `CorpusReplay` cannot authorize I/O, produce current conformance or complete
+  provenance, populate caches, advance checkpoints, or update canonical
+  fixtures. Retention/deletion remains governed by the applicable dossier even
+  when bytes are used only as corpus.
 - Fail-closed recording for unknown header classes and transport conformance
   fixtures for redirect, proxy, decompression, cancellation, and truncation.
 - Closed adapter diagnostics that cannot preserve an arbitrary underlying
@@ -712,12 +742,14 @@ Verification:
 - Inherited gate plus self-tests proving redaction, limit enforcement, fault
   order, and replay determinism.
 - Explicit synthetic-default, official-denied, personal/sensitive-denied,
-  permitted-public, expired, and cross-operation replay cases.
+  permitted-public, expired, cross-operation, conformance-versus-corpus, and
+  corpus-authority-denial cases.
 
 Exit criteria:
 
 - Tests cannot accidentally record credentials, protected official data, or
-  unbounded payloads, and a fixture cannot outlive its policy evidence.
+  unbounded payloads. Expired/mismatched bytes cannot remain authoritative,
+  while lawfully retained corpus bytes remain visibly untrusted and powerless.
 - `v0.19.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.20.0 - Source Onboarding Compiler
@@ -734,6 +766,8 @@ Deliverables:
 - Generated fixture-policy metadata and contradiction tests for data
   classification, retention, redistribution, evidence expiry, and replay
   compatibility.
+- Generated, type-distinct `ConformanceReplay` and `CorpusReplay` admission
+  metadata; corpus generation strips current-authority/provenance capability.
 - Manifest hashes and generated-file headers.
 - Generated-file inventory with family-based splitting that keeps every Rust
   source file below 500 lines.
@@ -775,26 +809,38 @@ Deliverables:
   profiles one-way without a dependency cycle.
 - Private non-cloneable state sequence:
   `AuthorizedExecution<R> -> PolicyRevalidated<R> ->
-  QuotaLeaseAcquired<R> -> CredentialInjected<R> -> AttemptInFlight<R>`.
+  QuotaLeaseAcquired<R> -> CredentialInjected<R> -> AttemptCommitted<R> ->
+  AttemptInFlight<R>`.
   Authorization binds a quota requirement, not a pre-acquired lease.
 - Time-of-use revalidation of freshness requirement, expiry,
   registry/policy version, revocation, kill switch, origin, and environment
   before quota acquisition, credential acquisition, and I/O. Retry delays,
   redirects, and page transitions must re-enter revalidation.
+- `AuthorityObservation<'epoch>` cannot cross executor/clock sessions; restart,
+  monotonic reset/wrap, or epoch mismatch forces re-observation before
+  `PolicyRevalidated<R>`.
 - Late quota reservation and concurrency acquisition. Credential-provider
   failure or final pre-I/O denial cancels the uncommitted attempt reservation,
   releases concurrency at most once, and does not spend a network attempt.
-  The attempt is atomically committed immediately before transport handoff;
-  every later failure or ambiguous result spends it.
+  Quota commit is atomic only within `QuotaAuthority`, not with external
+  network transmission. A crash after `AttemptCommitted<R>` but before
+  transport invocation conservatively spends the attempt; every later failure
+  or ambiguous result also spends it.
 - Bound sink/decoder driving and optional `alloc`-gated
   `Client<T, C, Q, P, K>` including the policy authority.
 - Synthetic source with open, denied, oversized, malformed, rate-limited, and
   stale-policy operations; no synthetic operation or decoder lives in the
   executor.
 - Blocking and async mock execution.
-- JSON and XML `EventSink` fixture paths plus composite wire/codec/semantic
-  finalization; only the registered source validator can issue
-  `SemanticComplete`.
+- JSON and XML `EventSink` fixture paths. `sweden-registry` invokes the bound
+  semantic validator and privately constructs a registry/operation/output
+  bound semantic witness. `sweden-executor` alone consumes matching
+  `WireComplete`, `JsonComplete`/`XmlComplete`, and semantic witnesses to
+  privately construct `Finalized<R>` and `Complete` provenance.
+- Sink stop/abort/panic never produces any completion witness. After quota
+  commit, cancellation or panic spends the attempt; concurrency uses an
+  unwind/drop guard only where unwinding actually occurs and otherwise
+  recovers by lease expiry.
 - Generated docs, policy tests, expiry tests, authorization-consumption tests,
   and a deliberately non-conforming trusted-transport demonstration.
 - Dry-run admission and mock execution contracts for one attempt, concurrency,
@@ -810,9 +856,13 @@ Verification:
   scenarios, provisional/finalized stream cases, hostile downstream authority
   attempts, decoder/validator/output substitution, semantic-validator bypass,
   forged-finalization attempts, retained-authorization expiry/revocation,
-  freshness downgrade, stale authority, credential-provider failure,
+  freshness downgrade, stale authority, cached-observation restart/epoch
+  mismatch, credential-provider failure,
   reservation cancellation, double release, pre-handoff versus ambiguous
-  post-handoff failure, deadline-mode propagation, and preflight corpus replay.
+  post-handoff failure, crash between quota commit and transport invocation,
+  sink continue/pause/stop/abort/panic, cross-execution/cross-codec witness
+  substitution, hostile witness construction, deadline-mode propagation, and
+  preflight corpus replay.
 
 Exit criteria:
 
@@ -1167,7 +1217,7 @@ Deliverables:
   object family, schema version, policy version, and safe redaction rules.
 - Advance only after successful decoding and explicit caller acknowledgement;
   resume, deduplication guidance, and invalidation.
-- Finalized completion token required before caller acknowledgement or
+- Executor-owned `Finalized<R>` required before caller acknowledgement or
   checkpoint advance.
 - At-least-once contract.
 - Explicit statement that durable downstream processing and checkpoint
@@ -1208,12 +1258,16 @@ Deliverables:
   operation-selected interval, window, concurrency, and coordinated
   shared-quota algorithms.
 - Atomic two-phase quota/concurrency lifecycle: late reservation and fenced
-  concurrency acquisition, commit immediately before transport handoff,
+  concurrency acquisition, authority-local commit immediately before
+  transport invocation,
   at-most-once unused cancellation/release, expiry, and crash/restart
   recovery. Credential-provider or pre-I/O policy failure cancels an
   uncommitted reservation without spending an attempt; ambiguous delivery
   after commit spends it. Concurrency recovers only through an accepted fenced
   release or lease expiry.
+- No cross-system atomicity claim: a crash after the authority commit but
+  before the external transport call spends the attempt even if no request was
+  sent.
 - Caller-injected monotonic time for deadlines, intervals, and backoff, plus
   separately trusted time for policy expiry and a closed calendar-window
   model: UTC-anchored, fixed-offset, or an opaque monotonically ordered
@@ -1228,6 +1282,9 @@ Deliverables:
   killed, stale-authority, wrong-version, wrong-origin, or wrong-environment
   package fails before another attempt, and callers cannot downgrade its
   freshness requirement.
+- Monotonic authority observations are valid only in their originating
+  clock/session epoch. Restart, counter reset/wrap, or epoch mismatch discards
+  cached observations and forces a fresh authority read or denial.
 - Explicit rollback, forward-jump, unavailable-time, and restart behavior,
   direct-mode advisory-per-client semantics, and fail-closed coordinated
   behavior when required time or quota authority is unavailable.
@@ -1242,7 +1299,9 @@ Verification:
 
 - Inherited gate plus deterministic clock, 429, limiter outage, concurrency,
   two-phase reserve/commit/cancel, credential failure, stale fencing, double
-  release, lease expiry, cancellation, crash/restart, UTC/fixed-offset/source
+  release, lease expiry, cancellation, crash before/after authority commit,
+  cached-observation restart, epoch mismatch, monotonic reset/wrap,
+  UTC/fixed-offset/source
   window boundaries, DST authority transitions, leap-second input, rollback,
   forward jump, 429 non-refund/non-broadening, retained authorization
   expiry/revocation, retry storm, each deadline mode, and deadline exhaustion
@@ -1273,7 +1332,7 @@ Deliverables:
   hit.
 - Explicit non-secret data/credential partition input reserved from day one.
 - Provenance preservation across hits.
-- Finalized completion token required before cache insertion or validator
+- Executor-owned `Finalized<R>` required before cache insertion or validator
   update.
 - Prohibited-cache tests.
 
@@ -1398,7 +1457,8 @@ Deliverables:
   tables.
 - Generated per-operation fixture recording/replay table covering synthetic
   default, official retention, redistribution, classification, evidence
-  expiry, and unsupported recording.
+  expiry, unsupported recording, authoritative `ConformanceReplay`, and
+  powerless `CorpusReplay`.
 - Compile-tested examples labeled by `no_std/no_alloc`, `no_std+alloc`, `std`
   orchestration, or external-adapter capability tier, plus migration policy.
 - Current source dossier hashes.
@@ -1451,7 +1511,12 @@ Deliverables:
   executor, codecs, conformance, Trafikverket, and facade.
 - Blocking/async parity for authorization, time-of-use revalidation, late
   quota reservation/commit, credential failure, in-flight ambiguity, bound
-  sink/decoder driving, and composite completion.
+  sink/decoder driving, producer-owned witness creation, and executor-only
+  finalization.
+- Ownership audit proving core exposes structural completion vocabulary only,
+  HTTP owns `WireComplete`, each codec owns its exact completion witness,
+  registry owns semantic validation/witness creation, and executor owns
+  `Finalized<R>`/complete provenance.
 - Compile-fail boundaries proving the facade contains wiring only, agency
   crates do not depend on HTTP/executor, and callers cannot construct
   authorized states.
@@ -1461,8 +1526,8 @@ Verification:
 
 - Inherited gate plus forbidden-edge, forged-state, registry/policy
   version-skew, freshness downgrade, decoder/validator/output substitution,
-  skipped/reordered state, double-execution, cancellation, and blocking/async
-  equivalence tests.
+  forged/cross-codec/cross-execution completion witnesses, skipped/reordered
+  state, double-execution, cancellation, and blocking/async equivalence tests.
 
 Exit criteria:
 
@@ -1557,6 +1622,9 @@ Deliverables:
   delivery; attempt capacity is not refunded after ambiguity.
 - Re-audit UTC, fixed-offset, and authority-supplied source-local window IDs,
   including DST, leap-second, rollback, forward-jump, and restart behavior.
+- Re-audit non-serializable authority observations across process restart,
+  clock/session epoch replacement, monotonic reset/wrap, and stale cached
+  state; each case re-observes or fails closed.
 - Time-of-use policy revalidation, source kill switch, policy-expiry
   transition, and cache directive enforcement.
 - Fail-closed coordination/store boundary for deployments that opt into shared
@@ -1608,7 +1676,9 @@ Deliverables:
 
 - Updated threat model, attack-surface inventory, abuse cases, and control map.
 - SSRF, parser, secret, executor authority, body replay, policy drift, rate,
-  cache, fixture retention/replay, supply-chain, and release reviews.
+  cache, completion-witness ownership, event-sink trust/panic behavior,
+  conformance-versus-corpus replay, fixture retention, supply-chain, and
+  release reviews.
 - Explicit trust-boundary review separating Sweden-controlled validation from
   arbitrary transport, DNS, TLS, proxy, clock, credential-store, and
   deployment behavior.
@@ -1672,8 +1742,9 @@ Deliverables:
 - Non-`Copy`, non-`Clone` permits where copying would duplicate authority or
   budget.
 - State-transition accounting across authorization, policy revalidation,
-  uncommitted quota reservation, credential failure, attempt commit, in-flight
-  ambiguity, and fenced concurrency release.
+  uncommitted quota reservation, credential failure, authority-local attempt
+  commit, the crash gap before transport invocation, in-flight ambiguity, and
+  fenced concurrency release.
 - Parent/child and cross-layer accounting tests proving that conversion
   between ledgers neither refunds nor double-spends capacity; ambiguous
   network results never refund an attempt permit.
@@ -1682,8 +1753,9 @@ Verification:
 
 - Inherited gate plus exact-limit, one-over, overflow, cancellation,
   partial-progress, replay, credential-provider failure, pre-handoff
-  cancellation, post-handoff ambiguity, double release, and copied-state
-  compile-fail cases.
+  cancellation, crash after commit/before transport invocation, post-handoff
+  ambiguity, sink panic with unwind/abort models, double release, and
+  copied-state compile-fail cases.
 
 Exit criteria:
 
@@ -1703,7 +1775,7 @@ Deliverables:
 - Three-level guarantee matrix for Sweden-owned behavior, conforming
   implementations, and arbitrary implementations of transport, monotonic/UTC
   clocks, quota authority, policy/kill-switch authority, credential provider,
-  cache/coordinated-state store, and allocator.
+  cache/coordinated-state store, allocator, and event sink callback.
 - Reviewed-adapter conformance suite for closed origin, redirect-as-data,
   disabled automatic proxy behavior, bounded decompression, cancellation,
   deadline-mode accuracy, timeout, redaction, and error translation.
@@ -1724,11 +1796,17 @@ Verification:
 - Lying clock, over-admitting quota, stale/rollback policy, wrong-scope
   credential, forbidden-retention cache, allocator-overhead, and suppressed
   kill-switch test doubles.
+- Replayed authority observation, wrong clock epoch, reset/wrapped monotonic
+  counter, and restart-with-cached-observation test doubles.
+- Event sinks that pause, stop, abort, retain data, block, panic with unwind,
+  or terminate under panic-abort, with honest attempt/concurrency and
+  no-completion outcomes.
 
 Exit criteria:
 
-- Documentation and types make no isolation, freshness, quota, credential, or
-  retention claim that an arbitrary external authority can invalidate.
+- Documentation and types make no isolation, freshness, quota, credential,
+  retention, callback-progress, panic-recovery, or CPU-bound claim that an
+  arbitrary external component can invalidate.
 - `v0.53.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.54.0 - Evidence-Bound Capability Stabilization Audit
@@ -1744,9 +1822,13 @@ Deliverables:
 - Audit both registered freshness modes and immediate time-of-use revalidation
   before credentials/I/O and after waits, redirects, retries, and page
   transitions; callers can tighten but never downgrade them.
+- Audit ephemeral authority-observation epoch binding and fail-closed restart,
+  monotonic reset/wrap, epoch mismatch, and cached-observation handling.
 - Audit `AuthorizedExecution<R>` binding of encoder, response profile,
   decoder, validator, output/provenance type, limits, and finalization through
   executor, retry, redirect, and next-page consumption.
+- Audit concrete completion ownership from HTTP and codec through
+  registry-owned semantic validation to executor-owned final provenance.
 - Fail-closed invalidation when evidence changes/expires, versions roll back,
   trust roots change, or a kill switch activates.
 - Explicit compiled-policy mode where expiry is the only automatic freshness
@@ -1763,8 +1845,10 @@ Verification:
 
 - Inherited gate plus stale digest, wrong operation, wrong environment, expiry,
   schema drift, forged status, retained authorization, freshness downgrade,
-  absent/stale authority, suppressed revocation, policy rollback, checks after
-  delay/redirect/page transition, and old-binary simulation tests.
+  absent/stale authority, cached observation after restart, epoch mismatch,
+  clock reset/wrap, suppressed revocation, policy rollback, completion witness
+  forgery/substitution, checks after delay/redirect/page transition, and
+  old-binary simulation tests.
 
 Exit criteria:
 
@@ -1808,7 +1892,10 @@ Deliverables:
 - Caller-owned scratch and buffer sizing guidance for borrowed parsers and
   bounded sinks.
 - `EventSink` callback lifetime guidance and compile-tested sync/async bridge
-  examples; callers needing retention use explicit bounded owned events.
+  examples for continue, pause/resume, stop, and abort; callers needing
+  retention use explicit bounded owned events.
+- Explicit callback trust guidance: arbitrary work, blocking, data copying,
+  panic-unwind versus panic-abort cleanup, and lease-expiry recovery.
 - Stable `NeedRequestCapacity` and `NeedScratch`-style errors with computable
   minimum sizes before partial semantic commitment where feasible.
 - Per-operation maximum bytes, attempts, redirects, pages, records,
@@ -1896,7 +1983,8 @@ Deliverables:
 
 - Operation-by-operation matrix linking code, policy, dossier, schema,
   fixture classification/retention/replay decisions, resource ledgers,
-  freshness mode, feature tier, documentation, and review expiry.
+  conformance-versus-corpus mode, freshness/clock-epoch mode, feature tier,
+  documentation, and review expiry.
 - Explicit unsupported and deferred inventory, including archive formats,
   dependencies, FFI, concrete network adapters, and post-1.0 agencies.
 - Current contradiction tests and plan/metadata consistency report.
@@ -2019,10 +2107,13 @@ Deliverables:
 - Retry amplification, cache stampede, cancellation, and kill-switch
   regression scenarios.
 - Cross-process lease acquisition/release, fencing, expiry, duplicate release,
-  authority restart, client crash, and ambiguous-delivery recovery scenarios.
+  authority restart, client crash before/after quota commit, the
+  commit-before-transport gap, and ambiguous-delivery recovery scenarios.
 - UTC/fixed-offset/source-local window transitions across DST, rollback,
   forward jump, leap-second input, and restart, plus retained-authorization
   expiry/revocation during queued and retried work.
+- Cached authority observations across process/clock epoch replacement,
+  monotonic reset/wrap, and restart always re-observe or fail closed.
 - Updated deployment and capacity assumptions.
 
 Verification:
@@ -2046,6 +2137,9 @@ Deliverables:
 
 - Final seed corpora for tokenization, Unicode, numbers, nesting, duplicates,
   owned values, and source envelopes.
+- Corpus inputs are explicitly `CorpusReplay`: they carry no current policy,
+  conformance, provenance, cache, checkpoint, or execution authority even when
+  derived from a lawfully retained historical fixture.
 - Extended mutation and out-of-process fuzz campaign with minimized
   regressions committed.
 - Resource-exhaustion, parser-agreement, and panic review.
@@ -2069,6 +2163,8 @@ Deliverables:
 
 - XML corpora for declarations, DTD/entity rejection, namespaces, expanded
   attributes, character references, matching, and budgets.
+- Corpus inputs are explicitly non-authoritative `CorpusReplay`; historical
+  fixture metadata cannot be upgraded into current conformance/provenance.
 - When CSV was admitted at `v0.51.0`, corpora for each admitted dialect,
   quoting, line endings, encoding, formula-leading output, records, and
   budgets; otherwise recorded proof that no CSV target or claim exists.

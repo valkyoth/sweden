@@ -80,6 +80,15 @@ its established scope or gates:
 - accepted: borrowed decoding uses a synchronous callback visitor whose event
   borrow cannot escape the callback; async callers retain events only through
   an explicit bounded owned `alloc` path;
+- accepted: `sweden-core` owns only structural completion vocabulary;
+  authority-bearing completion witnesses are opaque and privately constructed
+  by their exact producer crate, then consumed by `sweden-executor`;
+- accepted: event sinks return a closed continue/pause/stop/abort decision and
+  are trusted caller code that may block, panic, copy data, or consume
+  arbitrary CPU; Sweden cannot portably catch panics in `no_std`;
+- accepted: current-authority observations are non-serializable and bound to
+  the originating monotonic clock/session epoch; restart, reset, wrap, or
+  epoch mismatch requires a fresh observation or fails closed;
 - accepted: fixture recording is synthetic-only by default and official
   response retention is a dossier-governed, fail-closed capability rather than
   a general testkit convenience;
@@ -309,11 +318,12 @@ metadata changes. At `v1.0.0`, every crate then in the workspace converges to
 
 | Crate | Owns | Must not own |
 | --- | --- | --- |
-| `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan and borrowed-event/completion vocabulary, provenance | policy decisions, I/O, credentials, agency models |
+| `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan, borrowed-event contracts, structural completion traits/status, provenance vocabulary | concrete completion witnesses, policy decisions, I/O, credentials, agency models |
 | `sweden-policy` | source-independent dossier evaluation, revocation/expiry logic, cache/quota requirement contracts | source registry data, transport calls, credentials, source decoding |
-| `sweden-registry` | generated closed membership, exact profile compatibility, opaque `AuthorizedExecution<R>` construction and consumption state | generic policy algorithms, transport calls, credentials, wire implementations |
-| `sweden-http` | blocking/async transport, response sink, redirect-as-data, safe transport codes | authorization, retries, credential injection, agency semantics |
-| `sweden-executor` | time-of-use revalidation, quota reservation/commit/release transitions, late credentials, redirect/retry state machines, driving the behavior embedded in `AuthorizedExecution<R>`, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
+| `sweden-registry` | generated closed membership, exact profile compatibility, opaque `AuthorizedExecution<R>`, epoch-bound authority observation, invocation of the bound validator, private semantic witness | generic policy algorithms, transport calls, credentials, wire implementations |
+| `sweden-http` | blocking/async transport, response sink, redirect-as-data, safe transport codes, private `WireComplete` witness | authorization, retries, credential injection, agency semantics |
+| `sweden-executor` | time-of-use revalidation, quota reservation/commit/release transitions, late credentials, redirect/retry state machines, exact-witness consumption, private `Finalized<R>`/complete provenance, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
+| Codec crate | bounded syntax, event visitor, private codec-specific completion witness such as `JsonComplete` or `XmlComplete` | wire/semantic completion, I/O, policy authority |
 | `sweden-conformance` | synthetic operations, encoders, decoders, validators, output types, and fixtures | registry authority, generic execution, production source claims |
 | Agency crate | typed operation metadata, inputs, encoding, decoding, semantic validation | authority issuance, sockets, TLS, generic execution, other agencies |
 | `sweden` | feature wiring, aliases, and re-exports | implementation logic |
@@ -368,6 +378,28 @@ A hostile downstream test package attempts each forbidden construction and
 custom trait implementation. Compile-fail tests prove non-construction and
 runtime tests prove that structurally valid unregistered plans are denied.
 
+### 3.3 Completion witness ownership
+
+Completion uses the same explicit cross-crate ownership discipline:
+
+1. `sweden-core` defines only descriptive completion traits/status vocabulary;
+   it exposes no constructor for an authority-bearing completion token.
+2. `sweden-http` privately constructs opaque `WireComplete` after the exact
+   bounded response, trailer, and transport-finalization checks.
+3. Each codec privately constructs its own non-interchangeable witness
+   (`JsonComplete`, `XmlComplete`, or an admitted future codec witness) after
+   exact syntax consumption. A codec cannot construct another codec's witness.
+4. `sweden-registry` invokes the exact validator embedded in
+   `AuthorizedExecution<R>` and privately creates a semantic witness bound to
+   that registry entry, output type, schema, and policy version.
+5. `sweden-executor` consumes the exact wire, registered-codec, and semantic
+   witnesses and privately creates `Finalized<R>` and `Complete` provenance.
+
+Public structural trait implementations grant no completion authority.
+Hostile packages must fail to forge a witness, substitute a codec witness,
+combine witnesses from different executions, or bypass the registered
+validator.
+
 ## 4. Request Lifecycle
 
 ```text
@@ -395,7 +427,9 @@ late credential injection into a reviewed execution sink
         ↓
 CredentialInjected<R>
         ↓
-attempt admission committed as AttemptInFlight<R>
+quota admission committed as AttemptCommitted<R>
+        ↓
+transport invoked as AttemptInFlight<R>
         ↓
 trusted caller-owned transport boundary
         ↓
@@ -419,18 +453,28 @@ The closed freshness requirement is either
 `CompiledUntil { not_after }`, which requires trustworthy current time and
 fails after the compiled evidence expiry, or
 `CurrentAuthorityRequired { minimum_version, maximum_staleness }`, which also
-requires a current authenticated authority observation. Staleness is measured
-from that observation with trustworthy monotonic time. Missing, rolled-back,
-wrong-registry, or overly stale authority state fails closed.
+requires a current authenticated authority observation. For 1.0, observations
+are non-serializable `AuthorityObservation<'epoch>` values tied to an opaque
+registry-created `FreshnessEpoch`. The caller authority returns descriptive
+state, but only `sweden-registry` validates it against the bound registry and
+clock and privately constructs the observation. Staleness is measured only
+within that epoch. Restart, counter reset/wrap, an epoch mismatch, missing
+state, rollback, wrong registry, or excessive staleness requires a fresh
+observation or fails closed. Persisted observations are not admitted without a
+future authenticated absolute-expiry and authority-sequence design.
 
 `QuotaLeaseAcquired<R>` is an uncommitted attempt reservation plus concurrency
 lease acquired as late as possible. Credential-provider failure or a final
 pre-I/O policy denial cancels the unused reservation and releases concurrency
 at most once; it does not spend a network-attempt budget. Transition to
-`AttemptInFlight<R>` atomically commits the attempt immediately before the
-transport handoff. From that handoff onward, cancellation, failure, or
-ambiguous delivery spends the attempt, while concurrency is recovered only by
-a fenced release or expiry.
+`AttemptCommitted<R>` records an atomic quota commit inside `QuotaAuthority`
+immediately before transport invocation. That commit cannot be atomic with an
+external network call: a crash after commit but before invoking the transport
+conservatively spends the attempt. `AttemptInFlight<R>` begins only when the
+transport is invoked. From commit onward, cancellation, failure, panic, or
+ambiguous delivery spends the attempt, while concurrency is recovered by an
+unwind/drop guard where the platform actually unwinds, otherwise by a fenced
+release or lease expiry.
 
 Every blocking, async, mock, borrowed, owned, and custom-transport path starts
 with the same typed operation and canonical plan. Convenience APIs may
@@ -483,8 +527,12 @@ source dossier:
    redistribution; personal or sensitive classifications fail closed instead
    of relying on best-effort scrubbing.
    Recorded metadata binds source, operation, schema, policy, retrieval time,
-   classification, and the retention/redistribution decision. Replay rejects
-   an expired or mismatched fixture.
+   classification, and the retention/redistribution decision.
+   `ConformanceReplay` rejects expired or mismatched evidence and is the only
+   replay mode that may support current conformance/provenance claims.
+   `CorpusReplay` treats synthetic or lawfully retained historical bytes only
+   as hostile parser/fuzz input; it cannot authorize I/O, create current
+   provenance, populate caches, or advance checkpoints.
 7. Implement generated policy contradiction tests, request goldens, and
    negative parser tests before live execution.
 8. Keep official network execution disabled through `v0.36.0`; use mock,
@@ -520,18 +568,31 @@ general-purpose replacements for ecosystem parsers.
 
 Borrowed streaming uses a synchronous GAT-based visitor contract:
 `EventFamily::Event<'event>` and
-`EventSink<F>::on_event<'event>(F::Event<'event>)`. Decoder `push`/`finish`
-invokes the visitor before returning, so the borrow cannot escape the
-callback. Async transports may drive the same visitor while handling a chunk,
-but there is no `Stream<Item = Event<'_>>` claim. Callers that must retain
-events opt into an explicit bounded owned `alloc` path.
+`EventSink<F>::on_event<'event>(F::Event<'event>) -> SinkControl`.
+`SinkControl` is closed: `Continue`, `Pause`, `StopEarly`, or
+`Abort(SafeSinkCode)`. Decoder `push`/`finish` invokes the visitor before
+returning, so the borrow cannot escape the callback. `Pause` preserves only a
+bounded resumable provisional state; `StopEarly` and `Abort` terminate without
+completion. Arbitrary callback errors are collapsed to the closed safe code
+and never retained as `Error::source()`. Async transports may drive the same
+visitor while handling a chunk, but there is no
+`Stream<Item = Event<'_>>` claim. Callers that must retain events opt into an
+explicit bounded owned `alloc` path.
 
-Streaming events remain provisional until three independently non-forgeable
-states exist: wire completion, codec completion, and registered
-source-semantic completion. Only their registry-bound combination constructs
-`Complete` provenance. Provisional data cannot enter a cache or advance a
-cursor/checkpoint. Callers that act on provisional events before composite
-finalization explicitly own the downstream rollback/compensation risk.
+The sink is a caller-owned trust boundary. It can block, panic, copy borrowed
+data, or consume arbitrary CPU. Sweden cannot catch unwinds portably in
+`no_std` and makes no callback isolation claim. A panic/cancellation after
+attempt commit spends the attempt; concurrency cleanup depends on an actual
+unwind guard or lease expiry.
+
+Streaming events remain provisional until three opaque producer-owned
+witnesses exist: HTTP wire completion, the exact registered codec completion,
+and registry-owned source-semantic completion. Only
+`sweden-executor` can consume their registry-bound combination to construct
+`Finalized<R>` and `Complete` provenance. Provisional data cannot enter a cache
+or advance a cursor/checkpoint. Callers that act on provisional events before
+composite finalization explicitly own the downstream rollback/compensation
+risk.
 
 JSON work is split into:
 
@@ -665,12 +726,13 @@ The same trust distinction applies to all external authorities:
 | External boundary | Sweden-owned behavior | Conforming implementation | Arbitrary implementation |
 | --- | --- | --- | --- |
 | Transport | closed plans and safe wire handoff | conformance-tested origin/TLS/proxy/redirect behavior | may send, retain, or fabricate anything |
-| Clock | explicit monotonic/UTC requirements and fail-closed unknown time | passes rollback/jump/restart tests | may lie or stall |
+| Clock | explicit monotonic/UTC requirements, ephemeral epoch, and fail-closed unknown/reset/wrap | passes rollback/jump/restart/epoch tests | may lie, stall, reset, or reuse an epoch |
 | Quota authority | permit required where policy demands coordination | atomic reviewed admission semantics | may over-admit |
 | Credential provider | narrow source/environment/scope request | returns only correctly scoped credentials | may return, retain, or log secrets |
 | Cache/state store | typed directives, partitions, and bounded values | honors denial, purge, version, and collision rules | may retain forbidden/stale data |
-| Policy/kill-switch authority | version/expiry/revocation input is validated | supplies authenticated monotonic current state | may suppress revocation or roll back |
+| Policy/kill-switch authority | version/expiry/revocation and observation epoch are validated | supplies authenticated current state bound to the requested epoch | may suppress revocation, roll back, or replay an old observation |
 | Allocator | logical/requested/container budgets checked where observable | documents rounding, metadata, and failure behavior | may consume more physical memory than requested |
+| Event sink callback | borrow lifetime, bounded decisions, and safe error collapse | returns promptly and honors pause/stop/abort | may copy data, block, panic, or consume arbitrary CPU |
 
 Stronger guarantees require Sweden-controlled implementations or deployment
 isolation. Traits alone do not make these authorities trustworthy.
@@ -730,6 +792,10 @@ Parsers additionally need:
 - differential evidence against independently generated fixtures when that
   does not add a project dependency.
 
+`ConformanceReplay` and `CorpusReplay` are never interchangeable. Corpus runs
+exercise parser safety only and cannot create current evidence, final
+provenance, caches, checkpoints, or execution authority.
+
 Live tests are prohibited through `v0.36.0`. Once admitted at `v0.37.0`, they
 are opt-in, rate-limited by the reviewed authority, secret-safe, and never a
 substitute for deterministic fixtures.
@@ -744,6 +810,10 @@ Security deliverables grow with implementation:
 - payload-free logging rules;
 - secret type and redaction snapshots before credentials;
 - parser budgets before parser exposure;
+- producer-owned completion witnesses and hostile-forgery tests before final
+  provenance;
+- event-sink control, safe error, pause/abort, and panic-boundary tests before
+  callback exposure;
 - SSRF and redirect tests before transport execution;
 - cache partition tests before caching;
 - tenant tests before hosted multi-tenancy;
@@ -802,14 +872,19 @@ The granular version sequence and exact stop language live in
 - operation-level policy, dossier, provenance, and expiry evidence gates every
   stable capability;
 - every attempt passes non-downgradable time-of-use freshness revalidation,
-  late quota reservation, and atomic pre-handoff attempt commitment;
+  epoch-valid authority observation, late quota reservation, and an
+  authority-local commit whose pre-network crash gap is conservatively spent;
 - downstream operation implementations and descriptive IDs cannot mint
   registry membership or execution authority;
 - borrowed events cannot escape their visitor callback, and provisional stream
   events cannot create complete provenance, cache entries, or checkpoint
-  advances before wire, codec, and source-semantic finalization;
-- official fixtures are retained/replayed only under current operation-level
-  classification, retention, redistribution, and evidence decisions;
+  advances before private HTTP, exact-codec, registry-semantic, and
+  executor-final witness consumption;
+- official fixture retention follows its operation-level classification,
+  retention, and redistribution decision, and authoritative replay
+  additionally requires current matching evidence;
+- expired or historical bytes enter only powerless `CorpusReplay`, never
+  current conformance, provenance, caches, checkpoints, or execution;
 - external clock, quota, policy, credential, cache/state, and kill-switch
   authority trust is documented and tested without extending Sweden-owned
   guarantees to arbitrary implementations;
