@@ -37,7 +37,9 @@ replace the established product scope, crate policy, or release gate.
 | Accepted concern | Versions that establish it | Later proof point |
 | --- | --- | --- |
 | Closed identifiers and operation-specific policy | `0.2.0`, `0.7.0..=0.9.0` | `0.20.0`, `0.54.0`, `0.59.0` |
+| Payload-free validation and one shared operation path | `0.2.0`, `0.4.0`, `0.5.0` | `0.39.0`, `0.56.0`, `0.57.0` |
 | Consumable pre-charged resource ledgers | `0.3.0`, `0.12.0`, parser and paging milestones | `0.52.0`, `0.56.0`, `0.94.0` |
+| Local ledgers versus coordinated quota authority | `0.37.0`, `0.48.0` | `0.52.0`, `0.91.0` |
 | `no_std` sans-I/O transport contract | `0.10.0..=0.12.0` | `0.53.0`, `0.55.0`, `0.58.0` |
 | Strict first-party JSON/XML/CSV subsets | `0.13.0..=0.18.0`, `0.51.0` | `0.92.0`, `0.93.0` |
 | Evidence-bound expiring capabilities and permits | `0.8.0`, `0.9.0`, `0.22.0..=0.24.0` | `0.54.0`, `0.59.0`, `0.97.0` |
@@ -45,6 +47,7 @@ replace the established product scope, crate policy, or release gate.
 | Explicit default/`alloc`/`std`/transport tiers | all crate introductions and `0.40.0` | `0.55.0`, `0.98.0` |
 | Mobile, automotive, and future Aesynx portability | `0.40.0`, `0.41.0` | `0.56.0`, `0.94.0` |
 | Metadata-driven modularity and claim checking | `0.20.0`, `0.43.0`, `0.44.0` | `0.59.0`, `0.98.0` |
+| One 500-line ceiling for generated and handwritten Rust | every crate introduction | `0.20.0`, `0.44.0`, `0.98.0` |
 | Independent final assurance | per-version maintainer pentest from day one | `0.91.0..=0.99.0`, `1.0.0-rc.1` |
 
 Two recommendations were deliberately not accepted as roadmap replacements:
@@ -53,8 +56,10 @@ third-party HTTP/TLS adapters or unsafe FFI bindings remain outside 1.0 unless
 the project explicitly changes its zero-third-party or safe-Rust policy.
 
 Crates enter the workspace only when implementation starts; no empty
-placeholder package is published. The first additions are `sweden-http` in
-`0.10.0`, `sweden-testkit` in `0.19.0`, `sweden-schema` in `0.20.0`, and
+placeholder package is published. Focused crates enter only when their
+implementation begins: `sweden-policy` in `0.7.0`, `sweden-http` in `0.10.0`,
+`sweden-codec-json` in `0.13.0`, `sweden-codec-xml` in `0.16.0`,
+`sweden-testkit` in `0.19.0`, `sweden-schema` in `0.20.0`, and
 `sweden-trafikverket` in `0.22.0`. A focused `sweden-codec-csv` may enter at
 `0.51.0` only if its boundary audit justifies a separate crate; otherwise the
 reviewed CSV subset stays in an existing focused crate. Other named agency

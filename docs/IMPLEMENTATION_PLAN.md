@@ -58,6 +58,9 @@ its established scope or gates:
   access label;
 - accepted: configured limits become checked ledgers charged before I/O,
   allocation, parsing, retry, redirect, page fetch, or checkpoint advance;
+- accepted: local ledgers and coordinated quota authority are different
+  controls; multi-process or hosted execution fails closed when its reviewed
+  operation requires shared coordination and no authority is available;
 - accepted: JSON, XML, and CSV are narrow first-party subsets with explicit
   rejection behavior, caller-owned scratch in borrowed mode, and final fuzz
   campaigns before 1.0;
@@ -126,16 +129,18 @@ inside parser, policy, authentication, agency, or facade code.
 - The facade contains wiring and re-exports, not implementations.
 - Network adapters do not own source semantics.
 - Policy and codecs remain source-independent.
-- Non-generated Rust files must never exceed 500 lines.
+- Every Rust source file, generated or handwritten, must never exceed 500
+  lines.
 - Review splitting once a Rust file approaches 300 lines.
 - Generated files require an explicit manifest and are split by upstream
-  object family.
+  object family before reaching the same 500-line ceiling.
 
 ### 2.6 Bounded behavior
 
 Every operation declares limits for wire bytes, decoded bytes, nesting,
-strings, collection elements, pages, records, redirects, time, and retries.
-There is no unbudgeted `collect_all`, response buffering, decompression, archive
+strings, headers, chunks, allocation count/bytes, work units, collection
+elements, pages, records/cells, redirects, attempts, time, and retries. There
+is no unbudgeted `collect_all`, response buffering, decompression, archive
 extraction, or recursive parse.
 
 Configured ceilings and consumed state are separate types. Charges use checked
@@ -143,6 +148,20 @@ arithmetic and occur before accepting bytes, allocating, transmitting an
 attempt, following a redirect, fetching a page, or committing a checkpoint.
 Callers may tighten reviewed ceilings but cannot raise them through a stable
 public API.
+
+Four mechanisms remain distinct:
+
+- `Limits`: immutable operation maxima that callers may only tighten;
+- `Ledger`: non-`Copy`, non-`Clone` local capacity charged before work;
+- `QuotaAuthority`: caller/deployment coordination for time, concurrency, and
+  shared upstream quotas;
+- `ExecutionPermit`: one-use evidence that plan, policy, ledger, and required
+  quota authority agree.
+
+A per-process limiter is described as advisory unless the dossier explicitly
+establishes that scope. Hosted or multi-process modes requiring coordinated
+quota enforcement fail closed when the authority or trustworthy time source is
+unavailable.
 
 ### 2.7 Honest capability claims
 
@@ -161,16 +180,20 @@ Planned 1.0 dependency direction:
 ```text
 sweden-core
     ↑
+    ├── sweden-policy
     ├── sweden-http
+    ├── sweden-codec-json
+    ├── sweden-codec-xml
     └── sweden-trafikverket
-             ↑
-           sweden
+              ↑
+            sweden
 ```
 
 The facade depends on selected crates only through feature flags. Agency crates
-do not depend on `sweden-http`; they emit transport-neutral operation plans.
-SMHI, SCB, JobTech, and Skatteverket are post-1.0 additions and therefore do
-not appear in the 1.0 graph.
+use the shared core/policy/codec contracts they require but do not depend on
+`sweden-http`; they emit transport-neutral operation plans. SMHI, SCB,
+JobTech, and Skatteverket are post-1.0 additions and therefore do not appear in
+the 1.0 graph.
 
 At `0.1.0`, the implemented graph is only:
 
@@ -204,7 +227,10 @@ Initial crate-introduction schedule:
 | Version | Crate introduced and published |
 | --- | --- |
 | `0.1.0` | `sweden-core`, `sweden` |
+| `0.7.0` | `sweden-policy` |
 | `0.10.0` | `sweden-http` |
+| `0.13.0` | `sweden-codec-json` |
+| `0.16.0` | `sweden-codec-xml` |
 | `0.19.0` | `sweden-testkit` |
 | `0.20.0` | `sweden-schema` |
 | `0.22.0` | `sweden-trafikverket` |
@@ -232,7 +258,9 @@ operation policy + dossier evidence preflight
         ↓
 credential-free canonical request plan
         ↓
-private consumable policy/rate permit
+advisory cost + reviewed maximum inspection
+        ↓
+private consumable policy/quota permit
         ↓
 late credential injection into a reviewed execution sink
         ↓
@@ -244,6 +272,19 @@ source decoder and semantic validation
         ↓
 provenance-wrapped result
 ```
+
+Every blocking, async, mock, borrowed, owned, and custom-transport path starts
+with the same sealed typed operation and canonical plan. Convenience APIs may
+orchestrate that path but cannot introduce a parallel “easy” execution
+surface. A future `Client<T, C, Q, K>` may hold caller-supplied transport,
+clock, quota authority, and credential provider; it discovers none of them
+from ambient process state.
+
+Pre-I/O `Cost` estimates expose reviewed maxima and selected query/projection
+work, but remain advisory; consumable ledgers are authoritative. Page,
+offset, time-window, cell-partition, and change-checkpoint continuations remain
+source-specific types. No `Iterator` hides network I/O and no universal
+pagination abstraction erases upstream semantics.
 
 The API must make it impossible to select an arbitrary production origin.
 Credentials are inserted only after the origin is validated and are excluded
@@ -285,6 +326,9 @@ source dossier:
 
 Policy expiry fails closed. An expired source review cannot silently continue
 hosted relaying.
+Evidence digests are standard cryptographic values computed by pinned offline
+tooling and carried as opaque reviewed bytes in `no_std` code; Sweden does not
+invent a runtime provenance hash.
 
 ## 6. Codec Strategy
 
@@ -297,8 +341,8 @@ JSON work is split into:
 - bounded tokenization with exact JSON number grammar;
 - raw/decoded string ceilings, escape validation, Unicode scalar and surrogate
   handling;
-- iterative structure with token, depth, member, element, and duplicate-key
-  policy;
+- iterative structure with token, depth, member, element, work-unit, and
+  duplicate-key policy;
 - exact consumption after trailing whitespace;
 - borrowed events with caller scratch rather than allocation merely to
   unescape;
@@ -321,8 +365,10 @@ XML work is split into:
 CSV is a separate milestone. Each operation fixes its delimiter, quoting,
 line-ending, header, blank-record, BOM, and encoding rules; no dialect is
 guessed. Spreadsheet-safe export neutralizes formula-leading `=`, `+`, `-`,
-and `@`. Archive support remains unadmitted until it receives its own bounded
-security milestone. Unsupported constructs fail closed.
+and `@`, including after admitted leading whitespace/control prefixes. Raw
+machine export remains a distinct API. Archive support remains unadmitted
+until it receives its own bounded security milestone. Unsupported constructs
+fail closed.
 
 ## 7. Trafikverket 1.0 Track
 
@@ -368,6 +414,12 @@ The transport boundary requires:
 - explicit deadlines and cancellation;
 - safe error categories without raw headers or URLs;
 - no automatic proxy-environment use unless the caller explicitly enables it.
+
+Static dispatch is the default transport path. Heterogeneous boxed transports
+are a separate `alloc`-gated convenience and must document object-safety and
+MSRV behavior. Adapter errors are collapsed immediately into a closed safe code
+and opaque diagnostic ID; an arbitrary adapter error is never retained as an
+error source because it may contain headers, URLs, bodies, or credentials.
 
 Because project crates cannot depend on third-party HTTP/TLS clients, concrete
 ecosystem adapters are not admitted under the current policy. Users bridge
@@ -419,6 +471,11 @@ Capability checks cover:
 - `std`: orchestration interfaces without implying networking;
 - transport/agency features: no silent allocation, credentials, proxy,
   telemetry, filesystem, live-test, or hosted-relay activation.
+
+Each example declares its capability tier (`no_std/no_alloc`,
+`no_std+alloc`, `std` orchestration, or external adapter). MSRV checks cover
+each supported feature combination rather than only the aggregate feature
+graph.
 
 Parsers additionally need:
 
@@ -490,12 +547,15 @@ The granular version sequence and exact stop language live in
 - there are no unbudgeted parser, body, page, retry, or time paths;
 - JSON, XML, and CSV admitted subsets have final corpus and fuzz evidence;
 - every budget is a consumable pre-charged ledger rather than passive metadata;
+- coordinated deployments require a reviewed `QuotaAuthority`, while local
+  advisory limiting is never described as an agency-wide quota guarantee;
 - there is no arbitrary-origin or credential-leaking path;
 - caller-owned transport trust and Sweden-controlled executor guarantees are
   documented without cryptographic-sandbox claims;
 - operation-level policy, dossier, provenance, and expiry evidence gates every
   stable capability;
 - borrowed, `alloc`, `std`, and transport feature boundaries are verified;
+- generated and handwritten Rust source files all remain below 500 lines;
 - public docs contain no unsupported production claims;
 - independent security review and maintainer pentest findings are resolved in
   the versioned repository report;

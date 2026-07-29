@@ -77,14 +77,19 @@ when its implementation begins:
 
 | Planned introduction | Crate |
 | --- | --- |
+| `0.7.0` | `sweden-policy` |
 | `0.10.0` | `sweden-http` |
+| `0.13.0` | `sweden-codec-json` |
+| `0.16.0` | `sweden-codec-xml` |
 | `0.19.0` | `sweden-testkit` |
 | `0.20.0` | `sweden-schema` |
 | `0.22.0` | `sweden-trafikverket` |
+| `0.51.0` if its dedicated boundary is justified | `sweden-codec-csv` |
 | After `1.0.0` | `sweden-smhi`, `sweden-scb`, `sweden-jobtech`, and `sweden-skatteverket` |
 
 Every Rust crate introduced by this project is published to crates.io. Agency
-crates depend on `sweden-core`, never on the root facade or on one another.
+crates use the shared core, policy, and codec crates they require, never the
+root facade or another agency crate.
 
 ## Crate Versioning And Publication
 

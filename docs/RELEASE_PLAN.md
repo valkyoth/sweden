@@ -125,6 +125,8 @@ Deliverables:
 - Reviewed source constants reserved for later binding to dossier/policy
   evidence; `SourceId::reviewed` cannot remain a general assertion API.
 - Non-zero version wrappers.
+- Small payload-free `ValidationError` categories for stable constructors
+  instead of ambiguous `Option` failures.
 - Stable comparison and display rules without allocation.
 - Boundary and invalid-input tests.
 - Core API and crate documentation.
@@ -132,6 +134,8 @@ Deliverables:
 Verification:
 
 - Inherited gate plus exhaustive empty, length, character, and boundary tests.
+- Compile-fail proof that downstream callers cannot mint a reviewed identifier
+  or stable execution authority.
 - `no_std` compilation on MSRV and pinned stable.
 
 Exit criteria:
@@ -147,8 +151,11 @@ Deliverables:
 
 - Bounded strings, page sizes, byte counts, retry counts, and nesting limits.
 - Independent wire and decoded ceilings without an ordering assumption.
-- Checked counters, tighten-only ceilings, and stable exhaustion errors.
+- Checked non-cloneable ledgers, child-ledger accounting, tighten-only
+  ceilings, and stable exhaustion errors.
 - Separation between configured ceilings and consumable remaining state.
+- Work-unit and allocation-count primitives for paths that byte ceilings alone
+  do not bound.
 - No panics or unchecked arithmetic on caller input.
 
 Verification:
@@ -170,6 +177,8 @@ Deliverables:
 - Non-exhaustive stable error categories and safe field paths.
 - Retry advice separated from error text.
 - Redacted debug/display policy and snapshot fixtures.
+- Closed adapter error codes and opaque diagnostic IDs; arbitrary transport
+  errors, URLs, headers, and bodies are never retained as an error source.
 - Panic-free conversion tests.
 
 Verification:
@@ -194,6 +203,8 @@ Deliverables:
   and bounded body plan.
 - Canonical credential-free representation.
 - Explicit response and execution budgets.
+- Advisory pre-I/O `Cost` derived from reviewed maxima, selected projection,
+  encoded request size, and query-complexity units.
 - Compile-time separation from `std`.
 
 Verification:
@@ -214,7 +225,10 @@ Goal: make SSRF-resistant source origin selection a typed policy decision.
 Deliverables:
 
 - Source/environment origin identifiers and production/test separation.
-- HTTPS-required production metadata.
+- HTTPS-required production metadata with canonical ASCII host and fixed or
+  default port.
+- Explicit structured path/query grammar that rejects controls, ambiguous
+  encoding, user-info, scheme, authority, and host input.
 - Same-origin redirect policy representation.
 - Negative tests for arbitrary, downgraded, and cross-source origins.
 
@@ -234,12 +248,15 @@ Goal: model access, hosted use, data class, cache, attribution, and retry rules.
 
 Deliverables:
 
+- Create and publish the focused dependency-free `sweden-policy` crate.
 - Dependency-free policy enums and validated operation policy.
 - Stable predicates for non-exhaustive access/status enums so callers do not
   encode wildcard policy logic.
 - Fail-closed `Unknown` and `ReviewRequired` states.
 - Operation-specific access, authentication, hosted-use, data-class, cache,
   attribution, transformation, redistribution, retry, and pagination rules.
+- Typed cache directives such as `Forbidden`, `Private`, `Revalidate`, and
+  bounded freshness; callers may narrow but never broaden them.
 - Contradiction checks and decision tests.
 - Policy documentation.
 
@@ -265,6 +282,8 @@ Deliverables:
 - Canonical formatter and round-trip fixtures.
 - Official evidence references, retrieval time, content digest, reviewer,
   expiry, schema inputs, operation inventory, and explicit exclusions.
+- Standard cryptographic digests computed by pinned offline tooling and
+  represented as opaque reviewed values in portable code.
 
 Verification:
 
@@ -337,6 +356,8 @@ Deliverables:
 
 - Blocking trait plus standard `Future`-based trait boundary and explicit
   cancellation semantics.
+- Static dispatch by default; heterogeneous boxed transport convenience only
+  behind explicit `alloc`, with object-safety and MSRV behavior documented.
 - Borrowed body sink and backpressure contract.
 - Runtime-neutral async mock.
 - Blocking/async semantic parity table.
@@ -359,6 +380,7 @@ Deliverables:
 
 - Independent wire/decoded consumable ledgers, chunk sink, completion state,
   and truncation detection.
+- Header-byte/count, chunk-count, decoded-work, and UTF-8 carry limits.
 - Content-length and decompression-plan policy.
 - Backpressure and abort results.
 - Fault-injection test support.
@@ -381,6 +403,7 @@ Goal: tokenize the reviewed JSON subset under strict budgets.
 
 Deliverables:
 
+- Create and publish the focused dependency-free `sweden-codec-json` crate.
 - First-party UTF-8, string escape, exact JSON number, literal, and punctuation
   scanner.
 - Independent raw-string, decoded-string, token, and byte limits.
@@ -450,11 +473,15 @@ Goal: tokenize the XML subset required by Trafikverket without entity risk.
 
 Deliverables:
 
+- Create and publish the focused dependency-free `sweden-codec-xml` crate.
 - Bounded element, attribute, text, comment, and declaration scanning.
 - Early unconditional rejection of `DOCTYPE`, internal subsets, entity
   declarations, and external identifiers before any subset is scanned.
+- No entity table, external resolver, XInclude/resource callback, or
+  unreviewed markup declaration.
 - Only the five predefined entities and bounded numeric character references.
 - XML character and UTF-8 validation.
+- Conflicting or unsupported XML encoding declarations are rejected.
 - Namespace token representation.
 
 Verification:
@@ -476,7 +503,8 @@ Deliverables:
 - Iterative start/end matching with caller-provided stack and namespace scope.
 - Depth, attribute, text, and token limits.
 - Exact expanded-name matching, duplicate expanded-attribute rejection,
-  exact-consumption, and duplicate singleton policy.
+  reserved-prefix enforcement, exact-consumption, and duplicate singleton
+  policy.
 - Borrowed event interface.
 
 Verification:
@@ -522,6 +550,8 @@ Deliverables:
   secret/header allowlists.
 - Fail-closed recording for unknown header classes and transport conformance
   fixtures for redirect, proxy, decompression, cancellation, and truncation.
+- Closed adapter diagnostics that cannot preserve an arbitrary underlying
+  error as `source()`.
 - Synthetic fixture builder.
 - First-party deterministic mutation runner.
 
@@ -545,6 +575,8 @@ Deliverables:
 - Deterministic source/operation registry, closed identifier constant,
   capability, documentation, and contradiction-test generation.
 - Manifest hashes and generated-file headers.
+- Generated-file inventory with family-based splitting that keeps every Rust
+  source file below 500 lines.
 - Fail-closed scaffold for a new agency.
 - Generated crate-introduction and phase data checked against the release and
   version plans.
@@ -617,7 +649,10 @@ Deliverables:
 
 - Test/production environment types and closed origins.
 - Late API-key injection into a narrow Sweden-controlled execution sink.
-- Credential-free canonical request and cache identity.
+- Credential-free canonical request and cache identity plus a distinct
+  ephemeral wire target for source-mandated query credentials.
+- Secret/provider types without revealing `Debug`, `Display`, `Hash`,
+  serialization, `Copy`, `Clone`, or public byte getters.
 - Redaction, full-URL exclusion, and wrong-origin negative tests.
 - Explicit trust statement for caller transports and deployment-owned DNS,
   TLS, proxy, logging, and egress controls.
@@ -730,7 +765,7 @@ Deliverables:
 - Page request/cursor types and an explicit consumable collection ledger.
 - Page, record, wire-byte, decoded-byte, retry, allocation, and overall
   deadline limits charged before work.
-- Streaming-first iteration contract.
+- Streaming-first explicit `next_page` contract; no `Iterator` hides I/O.
 - Resume and early-stop behavior, unchanged-cursor rejection, and bounded
   cursor-cycle detection.
 
@@ -924,8 +959,11 @@ Deliverables:
 - Non-cloneable rate/retry permits charged before each attempt and keyed by
   source, operation, environment, origin, credential/tenant partition, and
   reviewed policy revision.
-- Caller-injected trusted monotonic clock and explicit statement that an
-  in-process limiter cannot coordinate a shared quota across processes.
+- `QuotaAuthority` contract for caller/deployment time, concurrency, and
+  coordinated shared-quota decisions.
+- Caller-injected trusted monotonic clock, explicit direct-mode
+  advisory-per-client semantics, and fail-closed hosted/multi-process behavior
+  when required coordination is unavailable.
 - Fail-closed limiter failure policy.
 
 Verification:
@@ -946,6 +984,9 @@ Deliverables:
 
 - Policy-versioned non-secret keys, raw/derived distinction,
   `Fresh`/`StaleWithin`/`CacheOnly` modes, and purge dimensions.
+- Caller-supplied collision-resistant key function where hashing is required,
+  with canonical identity comparison before accepting a collision-sensitive
+  hit.
 - Tenant partition input reserved from day one.
 - Provenance preservation across hits.
 - Prohibited-cache tests.
@@ -970,6 +1011,8 @@ Deliverables:
   examples.
 - One common typed `Operation::plan` path; optional `.send()` and `.collect()`
   methods remain thin orchestration over explicit transport and budget inputs.
+- Source-specific `Page`, time-window, cell-partition, and `ChangeBatch`
+  continuations rather than one universal pagination abstraction.
 - Public naming and feature review.
 - No generic HTTP surface, hidden global client, implicit runtime, implicit
   paging, implicit retry, or implicit network behavior.
@@ -1018,7 +1061,7 @@ Deliverables:
 - Parser, encoder, streaming, request-plan, and model-size benchmarks.
 - Stack and allocation measurements.
 - Worst-case budget documentation, including maximum bytes, attempts, pages,
-  records, allocation, and work per operation.
+  records, allocation, parser/query work units, and work per operation.
 - Low-bandwidth and intermittent-connectivity profiles suitable for
   automotive and mobile integration review.
 - Regression thresholds using first-party harnesses.
@@ -1062,7 +1105,8 @@ Deliverables:
 
 - Generated operation, access, rate, attribution, data-class, and compatibility
   tables.
-- Compile-tested examples and migration policy.
+- Compile-tested examples labeled by `no_std/no_alloc`, `no_std+alloc`, `std`
+  orchestration, or external-adapter capability tier, plus migration policy.
 - Current source dossier hashes.
 - Claim/implementation cross-check, including crate-introduction versions,
   feature tiers, roadmap phases, and post-1.0 agency scope.
@@ -1088,6 +1132,8 @@ Deliverables:
 - No undeclared path-only or GitHub-only crate.
 - Metadata-driven workspace discovery so validation does not remain hard-coded
   to the initial two crates.
+- Manifest enforcement proving generated and handwritten Rust sources share
+  the same 500-line maximum.
 - Publish rollback and owner checklist.
 
 Verification:
@@ -1241,7 +1287,8 @@ Deliverables:
   line-ending, header, blank-record, BOM, and encoding rules.
 - Field, row, record, byte, and allocation ledgers with exact consumption.
 - Deterministic writer and spreadsheet-safe export that neutralizes
-  formula-leading `=`, `+`, `-`, and `@`.
+  formula-leading `=`, `+`, `-`, and `@`, including after admitted leading
+  whitespace/control prefixes.
 - A separate `sweden-codec-csv` crate only if the boundary audit shows that
   keeping the implementation in an existing crate would weaken reviewability.
 
@@ -1266,13 +1313,15 @@ untrusted boundary.
 Deliverables:
 
 - Control map covering transport, wire/decoded body, parsing, allocation,
-  retries, redirects, pages, records, collection, encoding, and checkpoints.
+  retries, redirects, pages, records/cells, collection, encoding, CPU work
+  units, and checkpoints.
 - Checked pre-charge semantics, stable exhaustion errors, and tighten-only
   public ceiling changes.
 - Non-`Copy`, non-`Clone` permits where copying would duplicate authority or
   budget.
-- Cross-layer accounting tests proving that conversion between ledgers neither
-  refunds nor double-spends capacity.
+- Parent/child and cross-layer accounting tests proving that conversion
+  between ledgers neither refunds nor double-spends capacity; ambiguous
+  network results never refund an attempt permit.
 
 Verification:
 
@@ -1301,6 +1350,8 @@ Deliverables:
   clock, and credential-store controls.
 - Separate guarantee tables for Sweden-controlled executors, conforming
   adapters, and arbitrary caller implementations.
+- Hostile-plugin isolation guidance using a separate process, restricted
+  credential broker, bounded IPC, and deployment-owned egress controls.
 
 Verification:
 
@@ -1350,6 +1401,8 @@ Deliverables:
 - Additive feature and facade propagation rules with no hidden default
   activation.
 - Independent minimal examples for each supported tier.
+- MSRV checks for each supported feature combination, not only aggregate
+  all-feature builds.
 
 Verification:
 
@@ -1369,8 +1422,11 @@ Deliverables:
 
 - Caller-owned scratch and buffer sizing guidance for borrowed parsers and
   bounded sinks.
+- Stable `NeedRequestCapacity` and `NeedScratch`-style errors with computable
+  minimum sizes before partial semantic commitment where feasible.
 - Per-operation maximum bytes, attempts, redirects, pages, records,
   allocations, and elapsed-work profiles.
+- Advisory pre-I/O cost reports separated clearly from authoritative ledgers.
 - Pause, resume, cancellation, checkpoint, and partial-delivery semantics with
   no implicit retry or paging.
 - Automotive/mobile integration note that remains portable to future Aesynx
@@ -1394,6 +1450,9 @@ Deliverables:
 
 - One typed `Operation::plan` primitive shared by blocking, async, mock, and
   custom transports.
+- Optional generic `Client<T, C, Q, K>` orchestration over caller-supplied
+  transport, clock, quota authority, and credential provider, with no ambient
+  discovery.
 - Optional `.send()` and `.collect()` helpers that only orchestrate explicit
   transport, credential sink, clock, and budget inputs.
 - Typed response access to provenance, freshness, transformation, and source
@@ -1555,6 +1614,8 @@ Deliverables:
   anomaly simulations.
 - Evidence distinguishing local advisory limiting from coordinated shared
   quota enforcement.
+- Required `QuotaAuthority` behavior and fail-closed unavailability for every
+  topology whose dossier requires shared coordination.
 - Retry amplification, cache stampede, cancellation, and kill-switch
   regression scenarios.
 - Updated deployment and capacity assumptions.
@@ -1652,6 +1713,9 @@ Deliverables:
 
 - Assessment scope and baseline commit, findings, fixes, regression tests,
   refreshed docs/evidence, and compatibility report.
+- Independent assessment artifact naming and authenticating the exact frozen
+  candidate commit; this supplements rather than changes the routine
+  maintainer pentest/GitHub/tag flow.
 - Explicit deferral of non-blocking new ideas.
 
 Verification:
@@ -1677,6 +1741,8 @@ Deliverables:
 - SBOM and provenance artifacts appropriate to the dependency-free workspace.
 - Reproducible package hashes and dependency-order publication rehearsal.
 - Release-script audit proving unchanged subcrates are not selected.
+- External GitHub/CodeQL result attestation tied to the reviewed candidate,
+  without claiming local scripts can prove remote state.
 
 Verification:
 
@@ -1783,8 +1849,10 @@ documented Trafikverket and shared-core scope.
 
 Deliverables:
 
-- Stable `sweden-core`, `sweden-http`, `sweden-trafikverket`, and `sweden`
-  facade.
+- Stable `sweden-core`, `sweden-policy`, `sweden-http`,
+  `sweden-codec-json`, `sweden-codec-xml`, `sweden-trafikverket`, and
+  `sweden` facade, plus every other shared/tool crate admitted by the frozen
+  scope.
 - Complete declared Trafikverket operation/object matrix.
 - Current source policy, provenance, rate, retry, cache, and attribution
   behavior.
