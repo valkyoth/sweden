@@ -46,6 +46,12 @@ Release preparation also requires:
 - maintainer pentest and a current versioned repository report with
   `Status: PASS`.
 
+After `v0.21.0`, every live command additionally requires the executor's
+one-attempt quota/concurrency admission, explicit credential scope, hard
+response/deadline budgets, and disabled automatic retry/redirect unless a
+later reviewed milestone has enabled them. Before `v0.21.0`, live execution is
+prohibited.
+
 ## Simple Pentest And GitHub Flow
 
 When an implementation stop is reached:
@@ -201,6 +207,8 @@ Deliverables:
   typestate with private authorization transitions.
 - Method, reviewed structured path/query fields, protected credential slots,
   and bounded body plan.
+- `Replayable` and `OneShot` body typestates so consumption and ambiguous
+  delivery constrain all later retry/redirect decisions.
 - Canonical credential-free representation.
 - Explicit response and execution budgets.
 - Advisory pre-I/O `Cost` derived from reviewed maxima, selected projection,
@@ -284,6 +292,9 @@ Deliverables:
   expiry, schema inputs, operation inventory, and explicit exclusions.
 - Standard cryptographic digests computed by pinned offline tooling and
   represented as opaque reviewed values in portable code.
+- Reviewer/trust-root binding, monotonic policy version, downgrade/rollback
+  rejection, and kill-switch invalidation; the manifest states explicitly that
+  a digest proves identity, not authenticity or lawful status.
 
 Verification:
 
@@ -296,27 +307,35 @@ Exit criteria:
   and missing dossier evidence or expiry fails closed.
 - `v0.8.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.9.0 - Provenance Envelope
+## v0.9.0 - Provenance And Execution Capability
 
-Goal: keep source truth and transformation history attached to results.
+Goal: attach source truth to results and make reviewed authority unforgeable
+before any executor exists.
 
 Deliverables:
 
 - Source, operation, schema, policy, retrieval, licence, and transform metadata.
 - Raw/decoded/normalized/cache status distinctions.
 - Bounded transformation records.
-- Private evidence-bound stable capability shape tying policy, dossier digest,
-  schema version, environment, and expiry to later execution.
+- Operational private evidence-bound capability and non-cloneable one-attempt
+  permit tying operation, plan, origin, environment, policy/dossier/schema
+  versions, reviewer trust root, expiry, quota requirement, and kill-switch
+  state to later execution.
+- Monotonic policy-version and rollback/downgrade rejection.
 - Provenance equality and serialization test vectors.
 
 Verification:
 
-- Inherited gate plus missing/contradictory provenance tests.
+- Inherited gate plus missing/contradictory provenance, forged capability,
+  wrong-plan/environment/origin, stale digest, rollback, expiry, kill-switch,
+  and permit-reuse tests.
 - Confirm cache and transformation steps cannot erase original identity.
 
 Exit criteria:
 
-- Every future successful operation can carry complete source provenance.
+- Every future successful operation can carry complete provenance, and later
+  executors can accept authority only through this private capability/permit
+  path.
 - `v0.9.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.10.0 - `no_std` Transport Contract
@@ -344,7 +363,8 @@ Verification:
 
 Exit criteria:
 
-- A mock can execute a plan without creating an arbitrary network path.
+- A mock transport can exercise the contract values without owning policy,
+  authorization, credentials, source decoding, or a network path.
 - `v0.10.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.11.0 - Blocking And Async Transport Traits
@@ -369,7 +389,9 @@ Verification:
 
 Exit criteria:
 
-- Blocking and async plans enforce identical source and budget policy.
+- Blocking and async transport contracts expose identical cancellation,
+  backpressure, body-budget, and safe-error semantics; policy enforcement
+  remains executor-owned.
 - `v0.11.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.12.0 - Bounded Body Pipeline
@@ -381,7 +403,13 @@ Deliverables:
 - Independent wire/decoded consumable ledgers, chunk sink, completion state,
   and truncation detection.
 - Header-byte/count, chunk-count, decoded-work, and UTF-8 carry limits.
-- Content-length and decompression-plan policy.
+- Identity request encoding by default; unsupported response
+  `Content-Encoding` is rejected and adapter-side transparent decompression is
+  forbidden.
+- If decompression is later admitted, its boundary sits between independent
+  wire and decoded ledgers and charges output before exposure.
+- Bounded status, media type, charset, header/trailer, and informational
+  response handling plus content-length preflight.
 - Backpressure and abort results.
 - Fault-injection test support.
 - Pre-charge before chunk acceptance or decoded-fragment exposure.
@@ -406,7 +434,9 @@ Deliverables:
 - Create and publish the focused dependency-free `sweden-codec-json` crate.
 - First-party UTF-8, string escape, exact JSON number, literal, and punctuation
   scanner.
-- Independent raw-string, decoded-string, token, and byte limits.
+- Independent raw-string, decoded-string, number-digit, exponent-digit, token,
+  work-unit, and byte limits.
+- Leading BOM rejection and no permissive platform float parsing.
 - Unicode scalar validation, including surrogate-pair handling and rejection
   of isolated surrogates.
 - Stable lexical errors with safe offsets.
@@ -453,6 +483,8 @@ Deliverables:
 
 - `alloc`-gated strings, arrays, and maps with checked pre-charge before every
   reserve or growth.
+- Checked integer/float conversion with overflow, non-finite, range, and
+  operation-selected negative-zero policy.
 - Configurable unknown-field capture.
 - Allocation failure, logical-owned-byte, and cumulative-allocation errors.
 - Borrowed/owned parity tests.
@@ -482,12 +514,16 @@ Deliverables:
 - Only the five predefined entities and bounded numeric character references.
 - XML character and UTF-8 validation.
 - Conflicting or unsupported XML encoding declarations are rejected.
+- Explicit processing-instruction, XML-declaration placement, CDATA, and
+  comment policy; comments containing `--` are rejected.
+- Decoded-byte charge before character-reference expansion.
 - Namespace token representation.
 
 Verification:
 
 - Inherited gate plus XXE/entity, malformed name, invalid character, truncation,
-  and mutation fixtures.
+  and mutation fixtures, including every chunk split across DTD, entity,
+  declaration, CDATA, and processing-instruction prefixes.
 
 Exit criteria:
 
@@ -580,10 +616,18 @@ Deliverables:
 - Fail-closed scaffold for a new agency.
 - Generated crate-introduction and phase data checked against the release and
   version plans.
+- Explicit ceilings for input bytes, files, nodes, depth, references, generated
+  items, output bytes, and work units.
+- Rejection of cyclic/remote references, path traversal, normalized identifier
+  collisions, duplicate wire names, malformed Unicode, Rust/rustdoc/string
+  injection, unsupported constructs, and output explosion.
+- Canonical path handling and deterministic ordering.
 
 Verification:
 
-- Inherited gate plus regeneration-with-no-diff and malformed manifest tests.
+- Inherited gate plus regeneration-with-no-diff, every ceiling, cyclic/remote
+  reference, collision, traversal, injection, explosion, Unicode, and
+  malformed manifest tests.
 - Build remains network-free.
 
 Exit criteria:
@@ -594,16 +638,24 @@ Exit criteria:
 
 ## v0.21.0 - Synthetic Conformance Source
 
-Goal: prove the full architecture before touching production credentials.
+Goal: introduce the single generic executor owner and prove the full
+architecture before touching production credentials.
 
 Deliverables:
 
+- Create and publish dependency-free `no_std` `sweden-executor`.
+- Generic authorization transitions, capability/quota-permit consumption,
+  late credential injection, redirect/retry state machines, response
+  sink/decoder driving, and optional `alloc`-gated `Client<T, C, Q, K>`.
 - Local-only source with open, denied, oversized, malformed, rate-limited, and
   stale-policy operations.
 - Blocking and async mock execution.
 - JSON and XML fixture paths.
 - Generated docs, policy tests, expiry tests, permit-consumption tests, and a
   deliberately non-conforming trusted-transport demonstration.
+- Minimal live-execution guard requiring one admitted attempt, concurrency
+  admission, operation/source quota decision, explicit credential scope, hard
+  response/deadline budgets, and no automatic retry or redirect.
 
 Verification:
 
@@ -612,7 +664,9 @@ Verification:
 
 Exit criteria:
 
-- The local source exercises every shared boundary without external I/O.
+- The local source exercises every shared boundary without external I/O, the
+  executor is the sole owner of generic execution, and no later live command
+  can bypass the minimal live-execution guard.
 - `v0.21.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.22.0 - Trafikverket Source Dossier
@@ -627,6 +681,9 @@ Deliverables:
   privacy, and support inventory per candidate operation.
 - Retrieval dates, content hashes, review expiry, and responsible reviewer.
 - Operation/object inventory with explicit exclusions and schema/spec inputs.
+- At most four named 1.0 model-slice slots mapped to
+  `v0.31.0..=v0.34.0`; an unused slot is an explicit no-slice decision and
+  additional families remain post-1.0.
 - Authentication, redirect, retry, pagination, cache, transformation,
   redistribution, hosted-use, and data-class decisions for each candidate
   operation.
@@ -677,9 +734,12 @@ Deliverables:
 
 - One registered operation ID and request/response policy.
 - Typed inputs, canonical XML, strict response envelope, and synthetic fixture.
-- Non-cloneable capability and execution permit bound to the operation,
-  environment, origin, policy/dossier/schema digests, and review expiry.
-- Mock execution and opt-in official conformance command.
+- Use the `v0.9.0` non-cloneable capability and execution permit bound to the
+  operation, environment, origin, policy/dossier/schema evidence, and review
+  expiry.
+- Mock execution and an opt-in official conformance command gated by the
+  `v0.21.0` one-attempt quota/concurrency/credential/deadline guard; retries and
+  redirects remain disabled until their reviewed enforcement exists.
 - Explicit experimental status.
 
 Verification:
@@ -809,7 +869,11 @@ Deliverables:
 
 - Offline snapshot manifest with official reference, time, version, hash, and
   licence.
-- Deterministic generator and hand-written patch overlay.
+- Deterministic generator and hand-written patch overlay whose manifest records
+  rationale, evidence reference, reviewer, affected items, and deterministic
+  diff.
+- Overlay restrictions preventing silent changes to wire truth,
+  authentication, origin, access policy, or reviewed resource maxima.
 - Add/remove/type/requiredness/auth/terms change classification.
 - No automatic merge or build-time fetch.
 
@@ -817,6 +881,8 @@ Verification:
 
 - Inherited gate plus no-diff regeneration and intentionally changed schema
   classification fixtures.
+- Reject unmanifested overlays and overlays that alter protected wire,
+  authentication, origin, policy, or maximum fields.
 
 Exit criteria:
 
@@ -904,16 +970,19 @@ Exit criteria:
 - Slice B remains isolated and does not weaken prior validation.
 - `v0.34.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.35.0 - Trafikverket Remaining Stable Slice Inventory
+## v0.35.0 - Trafikverket Stable Slice Completeness Audit
 
-Goal: close declared 1.0 object coverage in small generated modules.
+Goal: audit the dossier-bounded slice set without adding a catch-all object
+family.
 
 Deliverables:
 
-- Final selected slices, explicit unsupported list, raw registered escape
-  hatch, and complete coverage matrix.
-- Per-slice fixtures and stable facade review.
+- Complete coverage matrix for the named slice slots implemented in
+  `v0.31.0..=v0.34.0`, including an explicit no-slice decision for any unused
+  slot.
+- Explicit unsupported list and stable facade review.
 - No arbitrary object or field names in stable APIs.
+- No generated model, operation, or object family added in this milestone.
 
 Verification:
 
@@ -922,7 +991,9 @@ Verification:
 
 Exit criteria:
 
-- Every claimed stable object is documented and every gap is explicit.
+- Every claimed stable object was introduced in an earlier named slice
+  milestone, is documented, and has complete evidence; everything else is
+  unsupported for 1.0.
 - `v0.35.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.36.0 - Trafikverket Change Checkpoints
@@ -931,10 +1002,13 @@ Goal: model reviewed incremental-update semantics without exactly-once claims.
 
 Deliverables:
 
-- Opaque source/environment/object-scoped checkpoint.
-- Commit-after-successful-downstream-processing flow, resume, deduplication
-  guidance, and invalidation.
+- Bounded opaque checkpoint and cursor bound to source, operation, environment,
+  object family, schema version, policy version, and safe redaction rules.
+- Advance only after successful decoding and explicit caller acknowledgement;
+  resume, deduplication guidance, and invalidation.
 - At-least-once contract.
+- Explicit statement that durable downstream processing and checkpoint
+  persistence remain caller responsibilities.
 - Crash/restart fixtures.
 
 Verification:
@@ -944,26 +1018,33 @@ Verification:
 
 Exit criteria:
 
-- No acknowledged-but-unprocessed checkpoint advance is possible.
+- Sweden never issues or persists an advanced checkpoint before successful
+  decoding and explicit caller acknowledgement; durable downstream processing
+  remains the caller's responsibility.
 - `v0.36.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.37.0 - Rate Limit And Retry Enforcement
 
-Goal: make source protection executable for direct and hosted callers.
+Goal: make source protection executable for direct and coordinated SDK
+deployments.
 
 Deliverables:
 
 - Minimum interval, fixed window, token budget, concurrency, and daily cap
   semantics required by reviewed operations.
 - Idempotency-aware retries, `Retry-After`, jitter input, and total deadline.
+- Retry authorization bound to method semantics, operation policy,
+  `Replayable`/`OneShot` body state, and delivery ambiguity.
 - Non-cloneable rate/retry permits charged before each attempt and keyed by
-  source, operation, environment, origin, credential/tenant partition, and
+  source, operation, environment, origin, credential/data partition, and
   reviewed policy revision.
 - `QuotaAuthority` contract for caller/deployment time, concurrency, and
   coordinated shared-quota decisions.
-- Caller-injected trusted monotonic clock, explicit direct-mode
-  advisory-per-client semantics, and fail-closed hosted/multi-process behavior
-  when required coordination is unavailable.
+- Caller-injected monotonic time for deadlines, intervals, and backoff, plus
+  separately trusted UTC/civil time for calendar windows and policy expiry.
+- Explicit rollback, forward-jump, unavailable-time, and restart behavior,
+  direct-mode advisory-per-client semantics, and fail-closed coordinated
+  behavior when required time or quota authority is unavailable.
 - Fail-closed limiter failure policy.
 
 Verification:
@@ -987,7 +1068,7 @@ Deliverables:
 - Caller-supplied collision-resistant key function where hashing is required,
   with canonical identity comparison before accepting a collision-sensitive
   hit.
-- Tenant partition input reserved from day one.
+- Explicit non-secret data/credential partition input reserved from day one.
 - Provenance preservation across hits.
 - Prohibited-cache tests.
 
@@ -1146,111 +1227,136 @@ Exit criteria:
 - Every crate archive is independently complete and within registry limits.
 - `v0.44.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.45.0 - Service Operation Registry
+## v0.45.0 - Executor Authority Integration Audit
 
-Goal: reuse SDK operation and policy metadata without creating a generic proxy.
+Goal: prove one crate owns generic execution and no composition path duplicates
+or bypasses its authority transitions.
 
 Deliverables:
 
-- Published `sweden-service-core` crate with explicit operation allowlist.
-- Request context, policy preflight, and source worker boundary.
-- No arbitrary URL, header, or method route.
-- Synthetic service tests only.
+- Dependency-DAG and ownership audit for core, policy, HTTP, executor, codecs,
+  Trafikverket, and facade.
+- Blocking/async parity for capability validation, quota-permit consumption,
+  late credentials, sink/decoder driving, and completion.
+- Compile-fail boundaries proving the facade contains wiring only, agency
+  crates do not depend on HTTP/executor, and callers cannot construct
+  authorized states.
+- No generic URL, header, method, transport, or raw-execution bypass.
 
 Verification:
 
-- Inherited gate plus unregistered operation, arbitrary host/header, expired
-  policy, and over-budget denial tests.
+- Inherited gate plus forbidden-edge, forged-state, double-execution,
+  cancellation, and blocking/async equivalence tests.
 
 Exit criteria:
 
-- Service dispatch can invoke only registered reviewed operations.
+- `sweden-executor` is the sole generic execution owner and every public
+  convenience path delegates to it.
 - `v0.45.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.46.0 - Tenant And Project Context
+## v0.46.0 - Credential Lifecycle Audit
 
-Goal: make future hosted authority explicit in every service call.
+Goal: close every Sweden-owned credential path before security stabilization.
 
 Deliverables:
 
-- Tenant, project, key ID, entitlement, quota, agreement, and correlation
-  context types.
-- No ambient or thread-local security context.
-- Mandatory context in cache, limiter, credential, and audit interfaces.
-- Cross-tenant negative fixtures.
+- Source/environment/operation/scope-bound provider and private one-use wire
+  injection review.
+- Canonical pre-authentication cache/fingerprint identity and ephemeral
+  secret-bearing wire representation.
+- Closed diagnostics, fixture/replay rejection, memory-lifetime guidance, and
+  explicit residual exposure statement for arbitrary transports, panic/crash
+  infrastructure, allocators, and the host process.
+- No hosted gateway-key or tenant credential surface.
 
 Verification:
 
-- Inherited gate plus missing/wrong tenant, key, agreement, cache, limiter, and
-  audit routing tests.
+- Inherited gate plus distinctive markers through planning, execution, debug,
+  errors, cache, metrics, fixtures, replay, cancellation, and adapter failures.
 
 Exit criteria:
 
-- A service operation cannot access protected state without explicit context.
+- No credential-leaking path exists in Sweden-owned code, and documentation
+  does not extend that guarantee to arbitrary transports or deployment state.
 - `v0.46.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.47.0 - Gateway Key And Scope Model
+## v0.47.0 - Body Replay Redirect And Retry State Machine
 
-Goal: define revocable public gateway credentials without storing plaintext.
+Goal: prevent unsafe retransmission or credential forwarding after delivery
+becomes ambiguous.
 
 Deliverables:
 
-- Key format, one-time display, verifier boundary, scopes, rotation overlap,
-  revocation, and safe last-used metadata.
-- No URL credentials.
-- Test-only verifier implementation.
-- Audit events.
+- `Replayable` and `OneShot` request-body typestates with private consumption.
+- Retry permission jointly bound to method semantics, operation policy,
+  attempt result, and body replayability.
+- Redirect resolution with fresh origin/policy/quota checks and no automatic
+  credential forwarding.
+- Explicit ambiguous-delivery, authentication-challenge, cancellation, and
+  partial-write states.
 
 Verification:
 
-- Inherited gate plus wrong scope, revoked, expired, rotated, malformed,
-  cross-project, logging, and timing-policy tests.
+- Inherited gate plus consumed/one-shot resend compile failures, partial write,
+  ambiguous result, auth challenge, redirect loop/cross-origin, and
+  credential-forwarding tests.
 
 Exit criteria:
 
-- Plaintext gateway keys never enter persistent or diagnostic interfaces.
+- A consumed or ambiguously delivered body cannot be resent unless the
+  reviewed operation explicitly proves replayability and issues fresh
+  authority.
 - `v0.47.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.48.0 - Hosted Cache And Limiter Semantics
+## v0.48.0 - Quota Cache And Kill-Switch Integration
 
-Goal: bind source rules and tenant isolation to hosted execution.
+Goal: integrate direct-SDK quota and cache behavior without claiming a hosted
+service.
 
 Deliverables:
 
-- Atomic limiter storage interface, fail-closed strict limits, single-flight
-  cache fill, partitioning, and purge.
-- Source kill switch and policy-expiry transition.
-- Deterministic store-failure simulation.
+- Local advisory limiter and coordinated `QuotaAuthority` topology contracts.
+- Monotonic/civil clock behavior, source kill switch, policy-expiry transition,
+  and cache directive enforcement.
+- Fail-closed coordination/store boundary for deployments that opt into shared
+  quota state.
+- Deterministic outage, clock, restart, stampede, and quota-amplification
+  simulation with no tenant/gateway product surface.
 
 Verification:
 
-- Inherited gate plus cross-tenant collision, store outage, stampede, kill
-  switch, stale policy, and quota-amplification tests.
+- Inherited gate plus limiter/cache outage, stale policy, kill switch,
+  rollback/jump, retry amplification, and local-versus-coordinated tests.
 
 Exit criteria:
 
-- A storage failure cannot flood an authority or cross tenant boundaries.
+- Direct SDK guarantees are explicit, and optional coordination failures
+  cannot exceed a reviewed source policy.
 - `v0.48.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.49.0 - Payload-Free Observability
+## v0.49.0 - Payload-Free SDK Diagnostics
 
-Goal: make operations diagnosable without collecting source payloads or secrets.
+Goal: make direct SDK execution diagnosable without collecting payloads,
+credentials, or unbounded identifiers.
 
 Deliverables:
 
-- Allowlisted log fields, metric labels, trace fields, audit events, and
-  redacted support bundle schema.
+- Allowlisted diagnostic event fields, bounded opaque IDs, metric labels, and
+  redacted support record schema.
 - Explicit secure-debug policy kept off by default.
-- Personal-data and high-cardinality label rejection.
+- Personal-data, source-payload, URL/header, credential, and high-cardinality
+  rejection.
+- No hosted audit-log, tenant, gateway, or telemetry-export implementation.
 
 Verification:
 
-- Inherited gate plus marker secrets/payloads across every diagnostic sink.
-- Cardinality and retention policy review.
+- Inherited gate plus marker secrets/payloads across every Sweden-owned
+  diagnostic sink, cardinality bounds, and arbitrary-adapter error tests.
 
 Exit criteria:
 
-- Default observability contains identifiers and counts, never payload content.
+- Default diagnostics contain bounded identifiers and counts only; hosted
+  observability remains outside 1.0.
 - `v0.49.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.50.0 - Security Architecture Review
@@ -1260,8 +1366,8 @@ Goal: perform a complete pre-beta adversarial review of implemented boundaries.
 Deliverables:
 
 - Updated threat model, attack-surface inventory, abuse cases, and control map.
-- SSRF, parser, secret, tenant, policy drift, rate, cache, supply-chain, and
-  release reviews.
+- SSRF, parser, secret, executor authority, body replay, policy drift, rate,
+  cache, supply-chain, and release reviews.
 - Explicit trust-boundary review separating Sweden-controlled validation from
   arbitrary transport, DNS, TLS, proxy, clock, credential-store, and
   deployment behavior.
@@ -1277,32 +1383,37 @@ Exit criteria:
 - No critical/high finding remains and medium findings have explicit treatment.
 - `v0.50.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.51.0 - Bounded CSV Codec
+## v0.51.0 - CSV Admission Decision And Bounded Codec
 
-Goal: admit only explicit CSV dialects required by reviewed operations.
+Goal: decide from the frozen Trafikverket dossier whether CSV belongs in 1.0,
+and admit it only through its own focused crate.
 
 Deliverables:
 
-- Streaming first-party parser with operation-fixed delimiter, quote,
-  line-ending, header, blank-record, BOM, and encoding rules.
-- Field, row, record, byte, and allocation ledgers with exact consumption.
-- Deterministic writer and spreadsheet-safe export that neutralizes
-  formula-leading `=`, `+`, `-`, and `@`, including after admitted leading
-  whitespace/control prefixes.
-- A separate `sweden-codec-csv` crate only if the boundary audit shows that
-  keeping the implementation in an existing crate would weaken reviewability.
+- Admission record naming each reviewed 1.0 operation that requires CSV, or an
+  explicit post-1.0 deferral when no such operation exists.
+- If admitted, create and publish `sweden-codec-csv`; CSV may not be placed in
+  core, JSON, XML, executor, or an agency crate.
+- If admitted, streaming first-party parsing with operation-fixed delimiter,
+  quote, line-ending, header, blank-record, BOM, encoding, field, row, record,
+  byte, and allocation rules.
+- If admitted, deterministic raw writer and separate spreadsheet-safe export
+  neutralizing formula-leading `=`, `+`, `-`, and `@`, including after admitted
+  leading whitespace/control prefixes.
 
 Verification:
 
-- Inherited gate plus malformed quotes, mixed line endings, oversized fields,
-  excess records, dialect confusion, formula injection, and mutation corpus.
-- Isolated `no_std`, optional `alloc`, and package checks for a new crate if
-  introduced.
+- Inherited gate plus dossier-to-admission consistency.
+- When admitted: malformed quotes, mixed line endings, oversized fields,
+  excess records, dialect confusion, formula injection, mutation corpus,
+  isolated `no_std`/`alloc`, and package checks.
+- When deferred: prove no 1.0 crate, feature, fixture, fuzz gate, or production
+  claim requires CSV.
 
 Exit criteria:
 
-- No input can select or guess a dialect, exceed a ledger, or produce an
-  unsafe spreadsheet cell through the safe export path.
+- CSV is either a fully separate bounded crate required by a named operation or
+  is explicitly absent from the 1.0 product and final mandatory fuzz scope.
 - `v0.51.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.52.0 - Consumable Resource Ledger Audit
@@ -1365,16 +1476,20 @@ Exit criteria:
   transport or deployment can invalidate.
 - `v0.53.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.54.0 - Evidence-Bound Stable Capabilities
+## v0.54.0 - Evidence-Bound Capability Stabilization Audit
 
-Goal: prevent descriptive status or stale evidence from authorizing execution.
+Goal: stabilize and audit the capability/permit guarantee implemented at
+`v0.9.0`; do not introduce a second authority mechanism.
 
 Deliverables:
 
-- Generated private capability bound to source, operation, environment,
-  origin, policy digest, dossier digest, schema version, and review expiry.
-- Non-cloneable execution permit consumed by the reviewed execution path.
-- Fail-closed invalidation when any bound evidence changes or expires.
+- Audit the existing generated private capability binding to source,
+  operation, plan, environment, origin, reviewer trust root, policy/dossier
+  identity, schema version, monotonic policy version, and review expiry.
+- Audit the existing non-cloneable execution permit through executor, retry,
+  redirect, and next-page consumption.
+- Fail-closed invalidation when evidence changes/expires, versions roll back,
+  trust roots change, or a kill switch activates.
 - `IntegrationStatus` retained only as descriptive metadata.
 
 Verification:
@@ -1384,8 +1499,8 @@ Verification:
 
 Exit criteria:
 
-- Stable execution authority can arise only from current reviewed evidence and
-  cannot be minted through a general public constructor.
+- The single `v0.9.0` authority path is stable, fully integrated, and cannot be
+  minted through a general public constructor.
 - `v0.54.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.55.0 - Capability-Tier Isolation
@@ -1450,9 +1565,9 @@ Deliverables:
 
 - One typed `Operation::plan` primitive shared by blocking, async, mock, and
   custom transports.
-- Optional generic `Client<T, C, Q, K>` orchestration over caller-supplied
-  transport, clock, quota authority, and credential provider, with no ambient
-  discovery.
+- Audit the optional generic `Client<T, C, Q, K>` owned by
+  `sweden-executor` over caller-supplied transport, clock, quota authority, and
+  credential provider, with no ambient discovery or facade implementation.
 - Optional `.send()` and `.collect()` helpers that only orchestrate explicit
   transport, credential sink, clock, and budget inputs.
 - Typed response access to provenance, freshness, transformation, and source
@@ -1523,20 +1638,23 @@ Exit criteria:
 
 ## v0.60.0 - Legal And Privacy Readiness
 
-Goal: admit only operations with current lawful hosted/direct-use decisions.
+Goal: admit only operations with current lawful direct-SDK decisions while
+keeping hosted service operation explicitly deferred.
 
 Deliverables:
 
 - Operation-level source dossiers, attribution, retention, redistribution,
-  transformation, and hosted-use decisions.
-- Privacy records, deletion paths, DPIA decision, acceptable-use policy, and
-  subprocessor inventory for hosted scope.
+  transformation, direct-use decisions, and explicit hosted-use deferral.
+- Privacy/minimization guidance, deletion and retention behavior for
+  caller-owned SDK data, and acceptable-use policy.
+- No gateway tenant, hosted credential, subprocessor, or service-production
+  claim.
 - Fail-closed unknown data class.
 
 Verification:
 
-- Inherited gate plus policy expiry, deletion, retention, attribution, direct
-  only, agreement expiry, and unknown-class tests.
+- Inherited gate plus policy expiry, deletion, retention, attribution,
+  direct-only, forbidden-hosted, and unknown-class tests.
 
 Exit criteria:
 
@@ -1560,7 +1678,8 @@ Verification:
 
 Exit criteria:
 
-- Recovery does not exceed upstream policy or lose tenant/source isolation.
+- Recovery does not exceed upstream policy or lose credential/source
+  isolation.
 - `v0.70.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.80.0 - Limited Public Beta
@@ -1605,12 +1724,12 @@ Exit criteria:
 
 ## v0.91.0 - Cross-Topology Quota Simulation
 
-Goal: validate rate, retry, cache, and hosted/direct policy across realistic
-execution topologies.
+Goal: validate rate, retry, cache, and direct/coordinated SDK policy across
+realistic execution topologies.
 
 Deliverables:
 
-- Deterministic single-process, multi-process, multi-tenant, outage, and clock
+- Deterministic single-process, multi-process, multi-client, outage, and clock
   anomaly simulations.
 - Evidence distinguishing local advisory limiting from coordinated shared
   quota enforcement.
@@ -1622,8 +1741,8 @@ Deliverables:
 
 Verification:
 
-- Inherited gate plus repeated seeded simulations proving source and tenant
-  ceilings are never exceeded by reviewed hosted execution.
+- Inherited gate plus repeated seeded simulations proving source and
+  deployment ceilings are never exceeded by reviewed coordinated execution.
 
 Exit criteria:
 
@@ -1663,8 +1782,9 @@ Deliverables:
 
 - XML corpora for declarations, DTD/entity rejection, namespaces, expanded
   attributes, character references, matching, and budgets.
-- CSV corpora for each admitted dialect, quoting, line endings, encoding,
-  formula-leading output, records, and budgets.
+- When CSV was admitted at `v0.51.0`, corpora for each admitted dialect,
+  quoting, line endings, encoding, formula-leading output, records, and
+  budgets; otherwise recorded proof that no CSV target or claim exists.
 - Extended mutation and out-of-process fuzz campaigns with minimized
   regressions committed.
 - Exact tool versions, commands, duration, and corpus hashes recorded.
@@ -1676,8 +1796,8 @@ Verification:
 
 Exit criteria:
 
-- The frozen XML and CSV surfaces have current reproducible adversarial
-  evidence.
+- The frozen XML surface and, only when admitted at `v0.51.0`, the CSV surface
+  have current reproducible adversarial evidence.
 - `v0.93.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.94.0 - Cross-Platform Resource Qualification
@@ -1764,7 +1884,8 @@ Deliverables:
 
 - Fresh retrievals, hashes, reviewers, expiries, schema references, terms,
   attribution, retention, redistribution, and data-class decisions.
-- Explicit confirmation or removal of each hosted and direct-use capability.
+- Explicit confirmation or removal of each direct-use capability and continued
+  hosted-service deferral.
 - Updated privacy, deletion, acceptable-use, support, and incident contacts.
 - Fail-closed test for every changed or expired decision.
 
@@ -1850,9 +1971,9 @@ documented Trafikverket and shared-core scope.
 Deliverables:
 
 - Stable `sweden-core`, `sweden-policy`, `sweden-http`,
-  `sweden-codec-json`, `sweden-codec-xml`, `sweden-trafikverket`, and
-  `sweden` facade, plus every other shared/tool crate admitted by the frozen
-  scope.
+  `sweden-codec-json`, `sweden-codec-xml`, `sweden-executor`,
+  `sweden-trafikverket`, and `sweden` facade, plus every other shared/tool
+  crate admitted by the frozen scope.
 - Complete declared Trafikverket operation/object matrix.
 - Current source policy, provenance, rate, retry, cache, and attribution
   behavior.
@@ -1889,3 +2010,24 @@ Planned facade milestones:
 Partner, targeted, paid, and legally sensitive operation families remain
 separate from open-data features and direct-only unless exact hosted permission
 is recorded. Adding an agency never justifies turning `sweden` into a monolith.
+
+### Post-1.0 Hosted Service Admission Track
+
+Hosted service work is not automatically authorized by reaching 1.0. If the
+maintainer later admits it, focused service crates begin their own independent
+`0.x` lines and each implementation stage is assigned an explicit future
+repository minor with the normal pentest/GitHub/tag gate. No placeholder crate
+is created beforehand.
+
+| Service-crate version | Post-1.0 stage |
+| --- | --- |
+| `0.1.0` | Service operation registry and worker boundary using stable SDK metadata |
+| `0.2.0` | Explicit tenant/project/agreement context and cross-tenant denial |
+| `0.3.0` | Gateway key verification, scope, rotation, revocation, and audit events |
+| `0.4.0` | Coordinated hosted quota/cache storage, partitioning, purge, and kill switch |
+| `0.5.0` | Payload-free observability plus production legal, privacy, reliability, security, and pentest admission |
+
+A test-only verifier or storage mock cannot support a hosted production claim.
+Concrete service crate boundaries, dependencies, and repository versions are
+frozen in a separate architecture decision before `0.1.0` implementation
+begins.

@@ -83,13 +83,15 @@ when its implementation begins:
 | `0.16.0` | `sweden-codec-xml` |
 | `0.19.0` | `sweden-testkit` |
 | `0.20.0` | `sweden-schema` |
+| `0.21.0` | `sweden-executor` |
 | `0.22.0` | `sweden-trafikverket` |
-| `0.51.0` if its dedicated boundary is justified | `sweden-codec-csv` |
+| `0.51.0` only if a reviewed 1.0 operation requires CSV | `sweden-codec-csv` |
 | After `1.0.0` | `sweden-smhi`, `sweden-scb`, `sweden-jobtech`, and `sweden-skatteverket` |
 
 Every Rust crate introduced by this project is published to crates.io. Agency
 crates use the shared core, policy, and codec crates they require, never the
-root facade or another agency crate.
+root facade or another agency crate. Generic execution belongs to
+`sweden-executor`; the facade provides wiring and re-exports only.
 
 ## Crate Versioning And Publication
 

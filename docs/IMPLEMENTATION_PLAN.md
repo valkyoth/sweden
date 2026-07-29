@@ -23,7 +23,9 @@ terms, limits, provenance, and access controls.
 The 1.0 product is:
 
 - a stable `sweden-core` contract;
+- focused first-party policy and admitted codec crates;
 - a transport-neutral `sweden-http` boundary;
+- a generic `sweden-executor` that owns reviewed orchestration;
 - a production-ready `sweden-trafikverket` integration;
 - a small feature-gated `sweden` facade;
 - a repeatable agency-onboarding system demonstrated by a synthetic
@@ -40,6 +42,7 @@ The 1.0 product is not:
 - a custom TLS, OAuth, BankID, X.509, or cryptography implementation;
 - a promise that every visible dataset may be cached, transformed, or relayed;
 - a replacement for legal review;
+- a hosted gateway or multi-tenant service;
 - a hosted credential pool for callers who are not independently authorized.
 
 ### 1.1 Gap-analysis integration decisions
@@ -59,8 +62,8 @@ its established scope or gates:
 - accepted: configured limits become checked ledgers charged before I/O,
   allocation, parsing, retry, redirect, page fetch, or checkpoint advance;
 - accepted: local ledgers and coordinated quota authority are different
-  controls; multi-process or hosted execution fails closed when its reviewed
-  operation requires shared coordination and no authority is available;
+  controls; multi-process or otherwise coordinated execution fails closed when
+  its reviewed operation requires shared authority and none is available;
 - accepted: JSON, XML, and CSV are narrow first-party subsets with explicit
   rejection behavior, caller-owned scratch in borrowed mode, and final fuzz
   campaigns before 1.0;
@@ -72,6 +75,9 @@ its established scope or gates:
   or unsafe-code admission decision and is not promised for 1.0;
 - retained: Trafikverket is the only production agency scope before 1.0.
   SMHI, SCB, JobTech, and Skatteverket stay on the documented post-1.0 tracks;
+- retained: hosted gateway/service crates are not part of the 1.0 product.
+  They may begin a separately admitted post-1.0 track only after the SDK
+  boundary is stable;
 - retained: the existing version-by-version pentest, GitHub, tagging, and
   independent publication process.
 
@@ -125,7 +131,8 @@ inside parser, policy, authentication, agency, or facade code.
 ### 2.5 Modularity
 
 - One agency or upstream API per crate.
-- Agency crates depend on `sweden-core`, not on one another or the facade.
+- Agency crates depend only on required shared core/policy/codec crates, not on
+  one another, the executor, HTTP, or the facade.
 - The facade contains wiring and re-exports, not implementations.
 - Network adapters do not own source semantics.
 - Policy and codecs remain source-independent.
@@ -175,18 +182,22 @@ schema version, review expiry, environment, and current evidence.
 
 ## 3. Workspace Architecture
 
-Planned 1.0 dependency direction:
+Planned 1.0 dependency direction (arrows point from dependency to consumer):
 
 ```text
-sweden-core
-    ↑
-    ├── sweden-policy
-    ├── sweden-http
-    ├── sweden-codec-json
-    ├── sweden-codec-xml
-    └── sweden-trafikverket
-              ↑
-            sweden
+sweden-core ─┬─> sweden-policy
+             ├─> sweden-http
+             ├─> sweden-codec-json
+             └─> sweden-codec-xml
+
+sweden-core + sweden-policy + sweden-http
+    └─> sweden-executor
+
+sweden-core + sweden-policy + sweden-codec-json + sweden-codec-xml
+    └─> sweden-trafikverket
+
+sweden-core + sweden-executor + sweden-trafikverket
+    └─> sweden
 ```
 
 The facade depends on selected crates only through feature flags. Agency crates
@@ -214,6 +225,7 @@ large for one audit:
 | `sweden-codec-csv` | `no_std`/`alloc` | Bounded first-party record parsing |
 | `sweden-policy` | `no_std` | Executable source and operation policy |
 | `sweden-http` | `no_std` | Sans-I/O blocking/async transport contracts and bounded sinks |
+| `sweden-executor` | `no_std`/`alloc` | Generic reviewed execution and optional client orchestration |
 | `sweden-testkit` | `std` | Deterministic mock, replay, mutation, and fixture support |
 | `sweden-schema` | `std` | Offline deterministic schema processing |
 | `sweden-*` agency crates | `no_std`/`alloc` | Source-owned operation and payload semantics |
@@ -233,8 +245,9 @@ Initial crate-introduction schedule:
 | `0.16.0` | `sweden-codec-xml` |
 | `0.19.0` | `sweden-testkit` |
 | `0.20.0` | `sweden-schema` |
+| `0.21.0` | `sweden-executor` |
 | `0.22.0` | `sweden-trafikverket` |
-| `0.51.0` | `sweden-codec-csv` only if the dedicated boundary is justified |
+| `0.51.0` | `sweden-codec-csv` only if a reviewed 1.0 operation requires CSV |
 | Post-`1.0.0` | Remaining named agency crates on their own tracks |
 
 The facade crate is the repository release clock: `sweden` always equals the
@@ -244,6 +257,22 @@ metadata changes. At `v1.0.0`, every crate then in the workspace converges to
 `1.0.0`. The current state is recorded in
 [CRATE_VERSION_MATRIX.md](CRATE_VERSION_MATRIX.md) and mechanically checked by
 `scripts/release_crates.py`.
+
+### 3.1 Boundary ownership
+
+| Crate | Owns | Must not own |
+| --- | --- | --- |
+| `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan vocabulary, provenance | policy decisions, I/O, credentials, agency models |
+| `sweden-policy` | dossier decisions, capability/permit issuance, cache/quota requirements | transport calls, credentials, source decoding |
+| `sweden-http` | blocking/async transport, response sink, redirect-as-data, safe transport codes | authorization, retries, credential injection, agency semantics |
+| `sweden-executor` | authorization transitions, quota-permit consumption, late credentials, redirect/retry state machines, sink/decoder driving, `Client<T, C, Q, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth |
+| Agency crate | sealed operation metadata, typed inputs, encoding, decoding, semantic validation | sockets, TLS, generic execution, other agencies |
+| `sweden` | feature wiring, aliases, and re-exports | implementation logic |
+
+The executor is generic over caller transport/clock/quota/credential resources
+and agency operation/decoder contracts. Agency crates never depend on the
+executor, and the executor never depends on an agency crate; the facade or
+application composes them.
 
 ## 4. Request Lifecycle
 
@@ -276,9 +305,9 @@ provenance-wrapped result
 Every blocking, async, mock, borrowed, owned, and custom-transport path starts
 with the same sealed typed operation and canonical plan. Convenience APIs may
 orchestrate that path but cannot introduce a parallel “easy” execution
-surface. A future `Client<T, C, Q, K>` may hold caller-supplied transport,
-clock, quota authority, and credential provider; it discovers none of them
-from ambient process state.
+surface. `Client<T, C, Q, K>` is introduced and owned by `sweden-executor` at
+`v0.21.0`; it may hold caller-supplied transport, clock, quota authority, and
+credential provider but discovers none from ambient process state.
 
 Pre-I/O `Cost` estimates expose reviewed maxima and selected query/projection
 work, but remain advisory; consumable ledgers are authoritative. Page,
@@ -319,7 +348,10 @@ source dossier:
    fixtures.
 7. Implement generated policy contradiction tests, request goldens, and
    negative parser tests before live execution.
-8. Add opt-in low-rate live tests only when the source permits them.
+8. Add opt-in low-rate live tests only when the source permits them and the
+   executor can require a one-attempt quota/concurrency permit, explicit
+   credential scope, hard response/deadline limits, and no automatic retry or
+   redirect.
 9. Generate documentation from the same reviewed operation metadata.
 10. Stop for maintainer pentest and keep the versioned repository report
     current.
@@ -328,7 +360,10 @@ Policy expiry fails closed. An expired source review cannot silently continue
 hosted relaying.
 Evidence digests are standard cryptographic values computed by pinned offline
 tooling and carried as opaque reviewed bytes in `no_std` code; Sweden does not
-invent a runtime provenance hash.
+invent a runtime provenance hash. A digest proves byte identity only, not
+official origin, authenticity, currency, review, or lawful use. Stable
+capabilities additionally bind reviewer/trust-root evidence, monotonic policy
+version, rollback/downgrade detection, expiry, and kill-switch state.
 
 ## 6. Codec Strategy
 
@@ -362,13 +397,15 @@ XML work is split into:
 - canonical escaping and deterministic output;
 - source-specific streaming decode.
 
-CSV is a separate milestone. Each operation fixes its delimiter, quoting,
-line-ending, header, blank-record, BOM, and encoding rules; no dialect is
-guessed. Spreadsheet-safe export neutralizes formula-leading `=`, `+`, `-`,
-and `@`, including after admitted leading whitespace/control prefixes. Raw
-machine export remains a distinct API. Archive support remains unadmitted
-until it receives its own bounded security milestone. Unsupported constructs
-fail closed.
+CSV is admitted before 1.0 only if a reviewed Trafikverket operation requires
+it. If admitted, it always lives in `sweden-codec-csv`; otherwise the crate and
+all mandatory CSV fuzz claims move post-1.0. Each admitted operation fixes its
+delimiter, quoting, line-ending, header, blank-record, BOM, and encoding rules;
+no dialect is guessed. Spreadsheet-safe export neutralizes formula-leading
+`=`, `+`, `-`, and `@`, including after admitted leading whitespace/control
+prefixes. Raw machine export remains a distinct API. Archive support remains
+unadmitted until it receives its own bounded security milestone. Unsupported
+constructs fail closed.
 
 ## 7. Trafikverket 1.0 Track
 
@@ -549,7 +586,10 @@ The granular version sequence and exact stop language live in
 - every budget is a consumable pre-charged ledger rather than passive metadata;
 - coordinated deployments require a reviewed `QuotaAuthority`, while local
   advisory limiting is never described as an agency-wide quota guarantee;
-- there is no arbitrary-origin or credential-leaking path;
+- there is no arbitrary-origin path in Sweden-owned execution;
+- no credential-leaking path exists in Sweden-owned planning, execution,
+  diagnostics, caching, fixtures, or replay code; arbitrary transports remain
+  trusted and outside this guarantee;
 - caller-owned transport trust and Sweden-controlled executor guarantees are
   documented without cryptographic-sandbox claims;
 - operation-level policy, dossier, provenance, and expiry evidence gates every
