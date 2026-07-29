@@ -87,13 +87,30 @@
   bounded collision candidates/comparison work, atomic replacement/purge,
   safe errors, and current permission/access/classification revalidation on
   fresh, stale, cache-only, miss, and `304`;
+- closed cache-entry trust: only opaque same-process/same-`CacheEpoch`
+  `Finalized<R>` is built-in provenance-preserving storage for 1.0;
+  persistent/shared provenance requires an explicit authenticated external
+  authority, and untrusted bytes cannot mint finalization or satisfy `304`;
+- no generic `Finalized<R>` deserialization, duplicate exact candidates fail
+  closed, and candidate order never chooses an authoritative entry;
+- closed cache time: monotonic age cannot cross `CacheEpoch`; authenticated
+  persistence needs trusted absolute expiry plus rollback-resistant sequence;
+  malformed/future timestamps deny, and upstream cache metadata narrows but
+  does not broaden dossier freshness by default;
+- declared store ceilings for entries, owned/encoded bytes, key/validator
+  bytes, access-partition cardinality, and eviction/purge/cleanup work, with
+  stable `StoreFull` and distinct insertion-versus-required-purge failure;
+- optional fenced exact-identity/access-partition cache-fill lease whose
+  waiters hold neither quota nor credentials and whose cross-process guarantee
+  requires coordination;
 - non-secret provider binding before cache/quota and matching short-lived
   one-use `SecretLease` only after quota wait/final policy check; expiry,
   revocation, generation, or partition mismatch cancels and restarts;
 - authority-local quota commit before the external transport call, with the
   intervening crash gap conservatively spending the attempt;
-- explicit deadline mode, retries, and rate budgets without claiming a clock
-  can preempt a stalled transport;
+- explicit total-deadline mode across cache, policy, quota, credential, and
+  transport waits without claiming a clock can preempt stalled blocking work
+  or a never-waking future, plus phase-specific fenced cancellation cleanup;
 - complete reviewed interval/window/concurrency enforcement and fenced lease
   recovery; official network execution remains prohibited through `v0.36.0`;
 - response byte accounting before decode;

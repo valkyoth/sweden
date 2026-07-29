@@ -350,6 +350,27 @@ semantic parity at `v0.21.0`. The explicit default is `NoCache`; no feature
 silently enables storage. `Client<T, C, Q, P, K, S = NoCache>` owns `S`, while
 one-shot execution accepts the same store contract explicitly.
 
+Cache entry trust is closed rather than inferred from a store trait:
+
+- `EphemeralOpaque` retains the executor's non-serializable, privately
+  constructed `Finalized<R>` inside one process and one opaque `CacheEpoch`;
+  restart or epoch mismatch invalidates freshness and the entry cannot be
+  reconstructed from bytes.
+- `AuthenticatedPersistent` is an explicit externally trusted capability. It
+  must authenticate the complete entry and supply trusted absolute expiry
+  plus rollback-resistant authority state before the registry can reconstruct
+  an entry through a private validation path. Sweden ships no dependency-free
+  persistent authority for 1.0.
+- `UntrustedBytes` may be decoded and semantically checked again under normal
+  input budgets, but cannot deserialize or mint `Finalized<R>`, satisfy a
+  `304`, or claim source provenance. It is corpus-like input, not a
+  provenance-preserving cache hit.
+
+No generic serialization/deserialization implementation exists for
+`Finalized<R>`. A store returning more than one candidate that exactly matches
+the full identity is ambiguous and fails closed; insertion order or “first
+match” never decides authority.
+
 The store is a caller-owned trust boundary. A conforming implementation:
 
 - returns at most the requested bounded number of collision candidates;
@@ -366,11 +387,35 @@ stale-within, cache-only, miss, and `304` decision rechecks current kill
 switch, policy/evidence/registry/schema versions, cache permission,
 `DataAccessScope`, `AccessPartitionId`, and classification.
 
+A fresh/stale decision also consumes a closed cache-time proof. Ephemeral
+entries use monotonic ticks only within their originating `CacheEpoch`;
+restart, reset/wrap, epoch mismatch, future creation time, or invalid
+subtraction invalidates the entry. Persistent/shared entries require the
+explicit authenticated capability, trusted absolute expiry, and a
+rollback-resistant authority sequence; caller/store timestamps alone carry no
+authority. Upstream `Date`, `Age`, `Expires`, and `Cache-Control` may narrow
+the dossier maximum but never broaden it unless the exact operation review
+explicitly says otherwise. Malformed or future-dated metadata fails closed.
+
 A fresh hit returns a prior `Finalized<R>` only after those checks. A
 cache-only miss returns a bounded miss without quota or I/O. A stale/miss path
 selects a validator from the exact candidate, then continues to quota
 admission. Cache errors follow the registered fail-closed/explicit-network-
 fallback policy and never turn an unvalidated candidate into a hit.
+
+Conforming stores declare bounded total entries, owned/encoded bytes, key and
+validator bytes, authoritative and local partition cardinality, and
+eviction/purge/expiry-cleanup work. Exhaustion returns stable `StoreFull`.
+Ordinary insertion failure preserves an otherwise successful live result;
+failure to purge data now forbidden by policy or handling rules is a surfaced
+policy/storage violation and cannot be silently downgraded.
+
+An optional fenced `CacheFillLease` may coalesce an exact canonical identity
+and authoritative access partition. Waiters hold no quota or credential
+lease; only the elected filler proceeds to upstream admission. Cancellation
+or expiry allows one bounded fenced takeover. Cross-process coalescing is
+claimed only by a coordinated store, and unsupported stores honestly claim no
+stampede protection.
 
 ### 2.9 Honest capability claims
 
@@ -1045,6 +1090,17 @@ reserved for an adapter or runtime that actually supplies preemption.
 Never-returning conformance cases run in bounded subprocesses or under an
 external watchdog so the test suite itself cannot hang.
 
+The selected total deadline covers every executor wait: policy refresh,
+credential binding/materialization, cache lookup/fill wait/replacement/purge,
+quota acquisition, and transport. In `Cooperative` mode each boundary receives
+the remaining budget and must cooperate; Sweden cannot forcibly preempt a
+never-waking external future. Cancellation drops uncommitted cache-fill and
+quota leases with fenced at-most-once cleanup, never retains a `SecretLease`,
+and follows the existing committed/in-flight ambiguity rules. Cache insertion
+timeout normally preserves a successful live value, while required purge
+timeout is a policy/storage violation. Runtime-backed hard cancellation must
+document and test which external operations it actually interrupts.
+
 The same trust distinction applies to all external authorities:
 
 | External boundary | Sweden-owned behavior | Conforming implementation | Arbitrary implementation |
@@ -1053,7 +1109,7 @@ The same trust distinction applies to all external authorities:
 | Clock | explicit monotonic/UTC requirements, ephemeral epoch, and fail-closed unknown/reset/wrap | passes rollback/jump/restart/epoch tests | may lie, stall, reset, or reuse an epoch |
 | Quota authority | permit required for the registry-bound `QuotaScope` | atomic reviewed admission under the exact generated partition recipe | may over-admit or treat forged partitions as fresh |
 | Credential provider | narrow source/environment/scope binding then one-use materialization | returns non-secret quota/access partitions and generation/expiry, then a matching short-lived `SecretLease`; preserves only identities whose pool/entitlement is unchanged | may return, retain, or log secrets, lie/change identity, or cause partition explosion |
-| Cache/state store | executor derives policy/identity and bounds candidates/work | honors atomic replacement, purge, safe errors, exact metadata, access partitions, and candidate ceilings | may retain forbidden/stale data, cross partitions, return partial entries, or amplify collisions |
+| Cache/state store | executor derives policy/identity/time, rejects duplicate exact candidates, and never deserializes `Finalized<R>` | honors declared capacity, atomic replacement/purge, safe errors, exact metadata/access partitions, entry trust level, cache epoch or authenticated expiry, and candidate ceilings | may retain/forge forbidden or stale data, cross partitions/epochs, lie about time/capacity, return partial entries, or amplify collisions |
 | Policy/kill-switch authority | version/expiry/revocation and observation epoch are validated | supplies authenticated current state bound to the requested epoch | may suppress revocation, roll back, or replay an old observation |
 | Allocator | logical/requested/container budgets checked where observable | documents rounding, metadata, and failure behavior | may consume more physical memory than requested |
 | Event sink callback | borrow lifetime, bounded decisions, and safe error collapse | returns promptly and honors pause/stop/abort | may copy data, block, panic, or consume arbitrary CPU |
@@ -1146,6 +1202,11 @@ Security deliverables grow with implementation:
 - authority-derived access-partition, bounded cache-candidate/work, accidental
   shared-store, and fresh/stale/cache-only/`304` revalidation tests before
   cache exposure;
+- cache-entry trust, non-deserializable provenance, cache epoch/restart/time
+  rollback, duplicate-exact-candidate, capacity/partition-cardinality, and
+  conditional-validator tests before cache stabilization;
+- cancellation and never-returning tests for cache, policy, quota, and
+  credential authorities as well as transport, with fenced cleanup evidence;
 - two-phase non-secret credential binding and late `SecretLease`
   expiry/rotation/revocation/mismatch tests before credentials;
 - event-sink control, safe error, pause/abort, and panic-boundary tests before
@@ -1215,6 +1276,18 @@ The granular version sequence and exact stop language live in
   authority-derived `AccessPartitionId`; caller namespaces only narrow, cache
   candidates/comparison work are bounded, and every hit/mode revalidates
   current access, classification, evidence, policy, and kill switch;
+- provenance-preserving built-in cache entries are opaque, in-process, and
+  bound to one `CacheEpoch`; no generic byte deserializer mints
+  `Finalized<R>`, duplicate exact candidates fail closed, and persistent/shared
+  provenance requires an explicitly trusted authenticated capability with
+  rollback-resistant absolute-expiry authority;
+- cache freshness uses its declared clock/epoch contract, upstream cache
+  metadata can only narrow dossier freshness by default, and rollback,
+  forward jump, restart, epoch mismatch, future timestamp, or malformed time
+  cannot silently extend reuse;
+- cache capacity, partition cardinality, eviction, cleanup, and purge work are
+  bounded; optional fill coalescing is fenced and never lets waiters hold
+  quota or credential leases;
 - credential binding contains no secret material; a one-use `SecretLease`
   materialized after quota wait must match binding identity/generation/expiry
   and is injected immediately or the reservation is cancelled and selection
@@ -1225,6 +1298,9 @@ The granular version sequence and exact stop language live in
   trusted and outside this guarantee;
 - caller-owned transport trust and Sweden-controlled executor guarantees are
   documented without cryptographic-sandbox claims;
+- the total deadline is propagated through cache, policy, quota, credential,
+  and transport waits with honest cooperative/preemptive semantics and
+  cancellation cleanup for every acquired lease;
 - operation-level policy, dossier, provenance, and expiry evidence gates every
   stable capability;
 - registry-bound `DataHandlingProfile` gates Sweden-owned cache, fixture,

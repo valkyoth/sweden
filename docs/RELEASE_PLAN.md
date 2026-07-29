@@ -400,6 +400,21 @@ Deliverables:
   global anonymous access-partition construction, bounded collision-candidate
   and comparison-work limits, safe store codes, and `NoCache` marker for the
   executor/store contracts introduced at `v0.21.0`.
+- Closed cache-entry trust vocabulary:
+  `EphemeralOpaque` retains a private non-serializable `Finalized<R>` within
+  one process/`CacheEpoch`; `AuthenticatedPersistent` requires an explicit
+  externally trusted authentication and rollback-resistant expiry capability;
+  `UntrustedBytes` can be reparsed under normal budgets but cannot mint
+  provenance or satisfy `304`. The dependency-free 1.0 implementation ships
+  only the first provenance-preserving mode.
+- Opaque `CacheEpoch` and cache-time vocabulary separate from policy
+  `FreshnessEpoch`: monotonic age is valid only in its originating process
+  epoch, while persistent/shared freshness requires trusted absolute expiry
+  and rollback-resistant authority state. Store/upstream timestamps alone
+  grant no freshness.
+- No public serialization/deserialization route for `Finalized<R>` and no
+  first-match rule: multiple candidates with the same exact full identity are
+  an ambiguous fail-closed store result.
 - Registry entries bind the exact generated header schema and canonical/cache
   participation rules from `v0.5.0`; authorization rejects missing, extra,
   duplicate, or differently classified header slots.
@@ -455,7 +470,8 @@ Verification:
   cached observation, wrong status/outcome profile, forged/unknown quota scope
   or partition, forged/merged access partition, quota/access type
   substitution, incomplete data-handling profile, excess cache candidates/
-  comparison work, and serialization-attempt compile-fail tests.
+  comparison work, forged cache trust/epoch, duplicate exact candidates, and
+  `Finalized<R>` serialization/deserialization-attempt compile-fail tests.
 - Hostile downstream test package that invents IDs/origins/operations,
   implements the public contract, constructs dossier-shaped data, and attempts
   to forge an authorized execution, register an unreviewed plan, or substitute
@@ -466,7 +482,8 @@ Exit criteria:
 
 - Every future successful operation can carry complete provenance, and later
   executors can accept authority only through this opaque indivisible
-  registry-bound execution package.
+  registry-bound execution package. Cache storage cannot create equivalent
+  authority through bytes, stale epochs, or candidate ordering.
 - `v0.9.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.10.0 - `no_std` Transport Contract
@@ -967,6 +984,11 @@ Deliverables:
   work, atomic complete-entry replacement/purge requirements, and closed safe
   errors. `Client<T, C, Q, P, K, S = NoCache>` owns the explicit store;
   one-shot execution accepts the same store contract.
+- Store results carry the closed entry-trust and cache-time proof from
+  `v0.9.0`. The executor accepts an opaque same-epoch finalized entry or an
+  externally authenticated persistent entry through its private validation
+  path; untrusted persisted bytes cannot become a hit or `304` base, and
+  duplicate exact matches fail closed.
 - `CacheResolved<R>` derives permission/identity from the registered
   `DataAccessScope`, binding, and `DataHandlingProfile`. Fresh, stale-within,
   cache-only, miss, and `304` paths revalidate kill switch, cache permission,
@@ -1016,6 +1038,11 @@ Deliverables:
 - Dry-run admission and mock execution contracts for one attempt, concurrency,
   credential scope, response budgets, and honest deadline-mode propagation.
   Official network execution remains prohibited through `v0.36.0`.
+- The total deadline is propagated through policy refresh, credential
+  binding/materialization, cache lookup/fill wait/replacement/purge, quota
+  acquisition, and transport. Cooperative mode cannot preempt a never-waking
+  caller future; cancellation releases uncommitted fenced leases at most once,
+  drops secret material, and preserves committed/in-flight ambiguity.
 - Time-boxed pinned out-of-process JSON, XML, and policy fuzz preflight with
   tool version, command, duration, corpus hashes, minimized regressions, and no
   unresolved crash/panic/hang/budget bypass.
@@ -1034,7 +1061,8 @@ Verification:
   expiry or provider revocation during quota wait, late secret-generation/
   identity mismatch, accidental shared cache store, candidate/work overflow,
   partial/failed store replacement and purge, fresh/stale/cache-only/miss
-  revalidation,
+  revalidation, forged cache trust, restart/epoch mismatch, future cache time,
+  duplicate exact candidates, phase-specific deadline/cancellation cleanup,
   reservation cancellation, double release, pre-handoff versus ambiguous
   post-handoff failure, crash between quota commit and transport invocation,
   sink continue/pause/stop/abort/panic, cross-execution/cross-codec witness
@@ -1550,14 +1578,35 @@ Deliverables:
 
 - Policy-versioned non-secret keys, raw/derived distinction,
   `Fresh`/`StaleWithin`/`CacheOnly` modes, and purge dimensions.
+- Closed cache-time evaluation: ephemeral entries use monotonic creation/age
+  only within one `CacheEpoch`; restart, reset/wrap, epoch mismatch,
+  future-dated creation, or invalid arithmetic invalidates them.
+  Persistent/shared entries require the explicit authenticated-persistence
+  capability, trusted absolute expiry, and rollback-resistant authority
+  sequence. UTC/store timestamps by themselves are not freshness authority.
+- Upstream `Date`, `Age`, `Expires`, and `Cache-Control` are strictly parsed
+  and may narrow the dossier maximum but cannot broaden it unless the exact
+  reviewed operation admits that behavior. Malformed or future-dated metadata
+  fails closed.
 - Stabilize `BlockingCacheStore`/`AsyncCacheStore` parity and `NoCache` from
   `v0.21.0`: bounded lookup candidates, atomic complete-entry replacement,
   fail-closed purge, no valid partial entry, and closed safe error collapse.
+- Stabilize entry trust: built-in provenance-preserving caching is opaque and
+  in-process for 1.0; an externally authenticated persistent store is an
+  explicit trusted authority, not an implied property of implementing the
+  store trait. Untrusted persisted bytes must traverse bounded decode and
+  semantic validation again and still cannot claim official source provenance
+  or satisfy `304`.
 - Registry-generated `DataAccessScope` resolves to a registry-owned anonymous
   global or provider-owned opaque `AccessPartitionId`, distinct from
   `CredentialPartitionId`. Caller local namespaces may only narrow.
-- Typed `ETag` and `Last-Modified` validators with size/character ceilings,
-  reviewed `Vary` dimensions, and strict `304` metadata merging.
+- Typed weak/strong `ETag` grammar and comparison, rejected wildcard except
+  where an operation explicitly admits it, bounded tag count and total bytes,
+  strict `Last-Modified` parsing/future-time rejection, and deterministic
+  `If-None-Match` precedence over `If-Modified-Since`.
+- Reviewed `Vary` dimensions and an exact allowlist of metadata that a `304`
+  may update; all other cached representation/provenance/handling metadata is
+  preserved or the response fails closed.
 - Cache validators enter requests only through the closed
   `CacheValidatorSlot`, are derived only from the already-selected cache entry,
   and are inserted late by executor-controlled cache logic. Callers cannot
@@ -1586,6 +1635,8 @@ Deliverables:
 - Lookup candidate count and full canonical-comparison work have independent
   pre-charged limits; a hostile/poor hash cannot trigger unbounded collision
   scanning.
+- Zero exact matches is a miss; one may proceed; two or more exact matches are
+  an ambiguous store failure. Candidate order never selects authority.
 - Cache/data access identity is authority-derived and separate from
   `QuotaScope`. Public rotation does not invalidate registry-global data;
   credential rotation preserves access only for unchanged entitlement and
@@ -1598,23 +1649,27 @@ Deliverables:
 Verification:
 
 - Inherited gate plus credential exclusion, collision, stale, policy-change,
-  raw/derived, ETag/Last-Modified bounds, `304` merge, unreviewed `Vary`,
+  raw/derived, weak/strong/wildcard/multi-tag ETag, conditional precedence,
+  malformed/future Last-Modified, exact `304` merge allowlist, unreviewed `Vary`,
   validator invalidation, caller-validator injection, validator-in-base-key,
   wrong cache key/partition/schema/policy/registry/`Vary`, missing prior
   finalization, revoked cache permission, protected/header-class substitution,
   and purge tests, plus cross-credential substitution, forged/merged access
   partition, public/authenticated transition, changed/unchanged-entitlement
   rotation, accidental shared stores, excess collision candidates/work,
-  partial replacement, purge failure, store safe-error collapse, and
-  blocking/async parity.
+  duplicate exact candidates, untrusted-persistence/forged-authentication,
+  cache rollback/forward jump/restart/epoch mismatch/future timestamp/shared
+  process skew, partial replacement, purge failure, store safe-error collapse,
+  and blocking/async parity.
 
 Exit criteria:
 
 - Policy denial always overrides caller cache preference and provisional data
   can never become a cache entry. A `304` can revalidate only the exact prior
-  finalized entry and cannot manufacture semantic completion. No cache mode or
-  store can merge authoritative access partitions or skip current handling
-  policy.
+  trusted finalized entry and cannot manufacture semantic completion. No byte
+  decoder, cache mode, or store can mint provenance, resolve duplicate exact
+  entries by ordering, merge authoritative access partitions, extend dossier
+  freshness, or skip current handling policy.
 - `v0.38.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.39.0 - Public API Ergonomics Review
@@ -1960,6 +2015,12 @@ Deliverables:
   fresh/stale/cache-only/miss/`304` path.
 - Fail-closed coordination/store boundary for deployments that opt into shared
   quota state.
+- Optional fenced `CacheFillLease` keyed by exact canonical identity and
+  authoritative access partition. Waiters hold no credential or quota lease;
+  only the elected filler reaches upstream admission; leader cancellation or
+  expiry permits one bounded fenced takeover. Cross-process coalescing is
+  claimed only for coordinated implementations, while unsupported stores
+  explicitly provide no coalescing guarantee.
 - Deterministic outage, clock, restart, stampede, and quota-amplification
   simulation with no tenant/gateway product surface.
 
@@ -1969,7 +2030,10 @@ Verification:
   rollback/jump, retry amplification, forged/unknown/partition-explosion,
   rotation/alias/changed entitlement, multiple-client, anonymous/authenticated,
   shared-store cross-access, cache-candidate/work exhaustion,
-  cache-versus-quota partition, and local-versus-coordinated tests.
+  cache-versus-quota partition, local-versus-coordinated, unsupported/
+  coordinated fill, waiter deadline/cancellation, leader expiry, stale-fence
+  rejection, and bounded takeover tests, including proof that waiters never
+  reserve quota or materialize credentials.
 
 Exit criteria:
 
@@ -2083,7 +2147,16 @@ Deliverables:
 
 - Control map covering transport, wire/decoded body, parsing, allocation,
   retries, redirects, pages, records/cells, collection, encoding, CPU work
-  units, XML work/progress, cache candidates/comparisons, and checkpoints.
+  units, XML work/progress, cache candidates/comparisons, total entries,
+  owned/encoded cache bytes, key/validator bytes, access-partition
+  cardinality, eviction/purge/expired-entry cleanup, and checkpoints.
+- Conforming cache stores declare those capacities and return stable
+  `StoreFull`; provider-driven authoritative/local partition explosion fails
+  before unbounded allocation. All eviction, purge, and cleanup scans consume
+  pre-charged work.
+- Ordinary cache insertion failure or timeout preserves a successful live
+  result. Failure or timeout while purging data forbidden by current policy or
+  handling rules surfaces a distinct policy/storage violation.
 - Audit that `BodyWireBytes` charges exactly the content-coded body bytes
   delivered after transfer framing and before content decoding; header/trailer
   budgets remain separate, and no Sweden ledger is presented as total
@@ -2111,8 +2184,10 @@ Verification:
   ambiguity, sink panic with unwind/abort models, double release, and
   copied-state compile-fail cases, with transfer-framing-versus-body,
   header/trailer separation, decompression boundary, `XmlWork` progress/
-  exhaustion, cache candidate/comparison amplification, binding restart/
-  secret-lease lifetime, and lying-adapter accounting cases.
+  exhaustion, cache candidate/comparison amplification, exact `StoreFull`
+  boundaries, byte/key/validator/partition cardinality, bounded
+  eviction/purge/cleanup, insertion-versus-required-purge failure, binding
+  restart/secret-lease lifetime, and lying-adapter accounting cases.
 
 Exit criteria:
 
@@ -2134,8 +2209,10 @@ Deliverables:
   clocks, quota authority, policy/kill-switch authority, credential provider,
   cache/coordinated-state store, allocator, and event sink callback.
 - Cache-store conformance for bounded candidates, atomic complete replacement,
-  purge, safe errors, metadata/access isolation, and blocking/async parity;
-  arbitrary stores remain trusted and may retain, cross, or fabricate entries.
+  purge, safe errors, metadata/access isolation, declared capacity,
+  entry-trust/cache-time proofs, duplicate-exact rejection, and blocking/async
+  parity; arbitrary stores remain trusted and may retain, cross, fabricate, or
+  lie about entries, time, trust, and capacity.
 - Reviewed-adapter conformance suite for closed origin, redirect-as-data,
   exact closed-header handoff without mutation or automatic additions,
   normalized response status/framing/singleton/informational/trailer metadata,
@@ -2162,7 +2239,10 @@ Verification:
   informational responses, and ambiguous trailers fail conforming adapters;
   arbitrary transports may fabricate all metadata and byte counts.
 - Never-waking async and permanently blocking cases under a bounded external
-  watchdog, proving `Cooperative` mode makes no hard-preemption claim.
+  watchdog for transport, cache lookup/fill/replacement/purge, quota
+  acquisition, credential binding/materialization, and policy refresh,
+  proving `Cooperative` mode makes no hard-preemption claim and each cancelled
+  phase performs its specified fenced cleanup.
 - Lying clock, over-admitting quota, stale/rollback policy, wrong-scope
   credential, forbidden-retention cache, allocator-overhead, and suppressed
   kill-switch test doubles.
@@ -2170,7 +2250,9 @@ Verification:
   binding and `SecretLease`, expire/revoke while queued, retain secret
   material, or conflate entitlement with quota pool.
 - Cache stores that return excess/colliding candidates, partial entries,
-  cross-access data, stale handling metadata, failed purge, or unsafe errors.
+  duplicate exact matches, cross-access data, stale handling metadata,
+  forged trust/epoch/expiry, future timestamps, capacity lies, failed purge,
+  or unsafe errors.
 - Forged quota partition, credential-pool rotation/alias split, partition
   explosion, multi-client evasion, and secret-derived identity test doubles.
 - Replayed authority observation, wrong clock epoch, reset/wrapped monotonic
@@ -2472,16 +2554,27 @@ Deliverables:
 - Cache atomic replacement/purge recovery, access-partition continuity/
   entitlement change, queued binding expiry, and late `SecretLease`
   materialization recovery without cross-access return or quota refund.
+- `CacheEpoch` invalidation and rewarming after restart; rollback-resistant
+  authenticated persistent/shared expiry recovery, sequence rollback and
+  shared-process skew denial, future/malformed timestamp denial, and explicit
+  behavior when the trusted persistence/time authority is unavailable.
+- Recovery from a cancelled/expired cache-fill leader, stale fencing token,
+  `StoreFull`, bounded eviction/purge interruption, and access-partition
+  cardinality exhaustion without duplicate upstream admission beyond policy.
 - Capacity and recovery objectives.
 - Incident and source-authority contact runbooks.
 
 Verification:
 
-- Inherited gate plus repeatable failure drills under source limits.
+- Inherited gate plus repeatable failure drills under source limits, including
+  monotonic epoch replacement, UTC rollback/forward jump, authenticated
+  persistence authority restart/rollback/unavailability, shared-process skew,
+  fill-leader takeover, and capacity recovery.
 
 Exit criteria:
 
-- Recovery does not exceed upstream policy or lose credential/source
+- Recovery does not exceed upstream policy, reuse an invalid cache epoch,
+  accept unauthenticated persisted provenance, or lose credential/source
   isolation.
 - `v0.70.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 

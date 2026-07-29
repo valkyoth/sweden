@@ -22,6 +22,9 @@ Status: foundation model extended for the planned registry/executor boundary
   identity, and continuity across shared-pool rotation/aliases.
 - Dossier-generated data-access scope, authoritative entitlement partition,
   cache identity/store isolation, and bounded collision-candidate work.
+- Cache-entry provenance trust, non-deserializable `Finalized<R>`, exact-match
+  uniqueness, `CacheEpoch`/trusted-expiry freshness, and bounded persistent
+  capacity/partition cardinality.
 - Non-secret credential binding identity/generation/expiry and matching
   short-lived one-use secret materialization.
 - Registry-bound executable data-handling profile preserved in finalized
@@ -64,6 +67,13 @@ Status: foundation model extended for the planned registry/executor boundary
 - A caller/store forging, merging, or substituting data-access partitions,
   sharing private entries across credentials, or amplifying cache collision
   work through poor hashes/excess candidates.
+- A store deserializing or fabricating authority-bearing finalized entries,
+  returning duplicate exact candidates, replaying a prior cache epoch, lying
+  about authenticated persistence/expiry, exploiting clock rollback/skew, or
+  exhausting entries, bytes, validators, partitions, eviction, or purge work.
+- Concurrent callers stampeding one lawful cache miss, retaining quota/secrets
+  while waiting, or exploiting cancelled/expired cache-fill leadership to
+  bypass fencing.
 - A provider expiring, revoking, rotating, or changing identity between
   non-secret binding and secret materialization, or retaining a secret lease.
 - XML engineered for quadratic namespace/QName/attribute/end-tag/reference
@@ -81,6 +91,8 @@ Status: foundation model extended for the planned registry/executor boundary
 - A transport, clock, quota/policy authority, credential provider, cache, or
   allocator that lies, stalls, over-admits, rolls back, leaks, retains, or
   consumes more physical memory than requested.
+- A cache, quota, credential, or policy future that never wakes or blocking
+  operation that never returns while holding leases or secret material.
 - A transport fabricating response status/framing/singleton/trailer metadata
   or under-reporting body/network bytes.
 - A caller treating provisional streaming events as committed before final
@@ -109,6 +121,9 @@ Status: foundation model extended for the planned registry/executor boundary
   protected-slot filling, and transport-owned framing to wire handoff.
 - Selected cache entry through executor-only validator insertion and exact
   `304` revalidation.
+- Opaque in-process cache entry or externally authenticated persistent record
+  through entry-trust, exact-match, cache-time, and private reconstruction
+  checks to a reusable finalized value.
 - Provider/registry-derived access binding through bounded cache lookup,
   current hit permission, and store replacement/purge.
 - Retained authorization to immediate policy freshness revalidation.
@@ -141,6 +156,8 @@ Status: foundation model extended for the planned registry/executor boundary
 - Cargo tools and GitHub Actions to release evidence.
 - Local ledger to coordinated quota/concurrency authority, including lease
   acquisition, fencing, release, expiry, cancellation, and restart.
+- Canonical identity/access partition to optional fenced cache-fill admission,
+  leader expiry/cancellation, bounded takeover, and waiter release.
 - Source response to fixture classification/retention decision and replay
   evidence validation.
 - Authority observation to the originating monotonic clock/session epoch.
@@ -173,6 +190,23 @@ Status: foundation model extended for the planned registry/executor boundary
 - Explicit `NoCache` plus blocking/async store contracts bound candidate count
   and comparison work, require atomic complete replacement/purge and safe
   errors, and leave permission/identity decisions in the executor.
+- Built-in provenance-preserving cache entries retain opaque
+  non-serializable `Finalized<R>` only within one `CacheEpoch`. Persistent/
+  shared provenance is a separately declared authenticated external authority;
+  untrusted bytes are reparsed as input and cannot satisfy `304` or claim
+  source provenance.
+- Full-identity comparison admits exactly one match; duplicates fail closed.
+  Ephemeral age cannot cross epochs, authenticated persistence supplies trusted
+  absolute expiry and rollback-resistant sequence, malformed/future time
+  denies, and upstream cache metadata cannot broaden dossier freshness by
+  default.
+- Store capacity covers total entries/bytes/key/validator/partition
+  cardinality and eviction/purge/cleanup work. `StoreFull` is stable, ordinary
+  insertion failure preserves live success, and forbidden-data purge failure
+  is surfaced as a policy/storage violation.
+- Optional fenced cache-fill admission elects one filler without quota or
+  secret leases in waiters; cancellation/expiry allows bounded takeover and no
+  cross-process coalescing is claimed without coordination.
 - Closed `CompiledUntil`/`CurrentAuthorityRequired` freshness modes rechecked
   immediately before credentials/I/O and after waits, redirects, and page
   transitions; callers can tighten but never downgrade them.
@@ -195,6 +229,10 @@ Status: foundation model extended for the planned registry/executor boundary
   final policy revalidation precedes a matching generation/partition/expiry
   checked one-use secret lease and immediate injection; mismatch cancels and
   restarts without sending.
+- Total-deadline budget reaches cache, policy, quota, credential, and transport
+  waits. Cooperative mode cannot force external progress; cancellation drops
+  uncommitted fenced leases at most once, never retains a secret lease, and
+  preserves committed/in-flight ambiguity.
 - Official network execution prohibited through `v0.36.0`; full reviewed
   rate/window/concurrency enforcement is required beginning at `v0.37.0`.
 - Separate synthetic `sweden-conformance` source rather than test semantics in
@@ -238,8 +276,9 @@ Status: foundation model extended for the planned registry/executor boundary
 - `no_std`, dependency-free code, and safe Rust do not prevent logic errors.
 - A caller-supplied transport remains trusted to enforce TLS and origin
   requirements.
-- A clock cannot preempt a blocking transport or never-waking future by
-  itself; deadline guarantees depend on the declared transport/runtime mode.
+- A clock cannot preempt a blocking transport, store/provider/authority call,
+  or never-waking future by itself; deadline guarantees depend on the declared
+  runtime mode and external component cooperation.
 - Caller event sinks can block, panic, copy data, or consume arbitrary CPU.
   Portable `no_std` code cannot catch panics or guarantee callback cleanup.
 - Policy may be revoked after the final authority check but before a
@@ -251,8 +290,9 @@ Status: foundation model extended for the planned registry/executor boundary
 - Caller-provided quota, policy, credential, cache, and allocator
   implementations can invalidate guarantees assigned to those boundaries.
 - An arbitrary cache store may retain/cross/fabricate entries or ignore purge,
-  and an arbitrary credential provider may lie about binding/entitlement or
-  retain secret material; traits do not sandbox either.
+  trust/time/capacity claims, ignore purge, or stall forever, and an arbitrary
+  credential provider may lie about binding/entitlement, retain secret
+  material, or stall forever; traits do not sandbox either.
 - `BodyWireBytes` excludes TLS, HTTP transfer/framing, headers,
   retransmissions, and other network overhead; actual bandwidth enforcement
   remains a transport/deployment guarantee, and arbitrary transports may lie

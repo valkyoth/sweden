@@ -28,7 +28,8 @@ Rules:
   separate `sweden-conformance` crate.
 - `sweden-executor` alone orchestrates non-secret credential/access binding,
   explicit blocking/async/`NoCache` store contracts, bounded cache lookup,
-  validator insertion, quota scope, late one-use secret materialization,
+  closed entry-trust/cache-time decisions, validator insertion, optional
+  fenced fill leases, quota scope, late one-use secret materialization,
   registered response outcomes, and successful final provenance.
 - `sweden-core` owns canonical closed request-header categories and structural
   completion/generative attempt vocabulary only; constructing a structural
@@ -43,7 +44,8 @@ Rules:
   bandwidth ownership.
 - Credential providers own opaque binding tokens, quota/access partition IDs,
   generations/expiries, and one-use `SecretLease` materialization; cache stores
-  own storage mechanics only and cannot decide access or handling policy.
+  own storage mechanics and declared capacity only and cannot decide access,
+  provenance, freshness, or handling policy or deserialize `Finalized<R>`.
 - Agency crates own generated field sensitivity/handling metadata but cannot
   broaden the registry-bound operation profile.
 - Transport crates do not own agency semantics.

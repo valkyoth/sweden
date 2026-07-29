@@ -23,6 +23,9 @@ Before credential support is added:
 - after cache miss/quota admission/final policy check, a one-use `SecretLease`
   must match the binding, be injected immediately, and never be cached or
   retained for retry;
+- deadline expiry or cancellation during materialization/injection must drop
+  the secret lease, release uncommitted authority at most once, and never
+  transfer secret material to a cache-fill waiter;
 - fixture and replay tooling must fail closed on protected headers;
 - every secret-bearing error and debug path needs snapshot tests;
 - hosted credentials must be tenant-scoped and encrypted outside the SDK.
