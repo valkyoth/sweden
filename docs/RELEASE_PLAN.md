@@ -225,7 +225,10 @@ Deliverables:
 
 Verification:
 
-- Inherited gate plus request canonicalization goldens and invalid path tests.
+- Inherited gate plus request canonicalization goldens and invalid path tests,
+  including percent-encoded separators/dot segments, duplicate query keys,
+  backslashes, Unicode-equivalent spellings, fragments, scheme-relative
+  forms, and encoded controls.
 - Prove no arbitrary scheme, authority, or absolute URL is representable.
 
 Exit criteria:
@@ -250,7 +253,10 @@ Deliverables:
 
 Verification:
 
-- Inherited gate plus SSRF-oriented host, port, scheme, and redirect fixtures.
+- Inherited gate plus SSRF-oriented host, port, scheme, and redirect fixtures,
+  including encoded `/`, `\`, `.`, and `..`, duplicate query keys,
+  Unicode-equivalent spellings, fragments, scheme-relative locations, and
+  percent-encoded control characters.
 - Review every accepted origin as static source evidence.
 
 Exit criteria:
@@ -343,9 +349,18 @@ Deliverables:
   semantic validator, output/provenance type, limits, finalization behavior,
   origin, environment, policy/dossier/schema versions, reviewer trust root,
   expiry, quota requirement, and kill-switch state to later execution.
+- Closed registry-bound `FreshnessRequirement`:
+  `CompiledUntil { not_after }` or
+  `CurrentAuthorityRequired { minimum_version, maximum_staleness }`.
+  Trustworthy current time is mandatory; authority-backed observations bind
+  the registry/policy identity and use monotonic time to enforce staleness.
+  Callers may strengthen but never downgrade the registered requirement.
 - Minimal stable `MonotonicClock`, `UtcClock`, `QuotaAuthority`, and
   `PolicyAuthority` contract shapes required by the later executor; algorithms
   and calendar/retry stabilization remain at `v0.37.0`.
+- The quota contract reserves distinct two-phase acquire, commit, unused
+  cancel/release, fencing, and expiry outcomes so v0.21 mock states and v0.37
+  coordinated algorithms do not require a second authority API.
 - Fields and constructors private to `sweden-registry`; downstream code may
   carry an authorized execution but cannot construct, clone, alter, inspect,
   or pair it with a caller-selected decoder, validator, media profile, or
@@ -355,7 +370,10 @@ Deliverables:
   skew fails closed, and no shim translates authorization across versions.
 - Registry evolution rules: adding an entry/feature releases the registry;
   removal, security-policy change, evidence revocation, or rollback advances a
-  monotonic registry/policy version and invalidates prior packages.
+  monotonic registry/policy version. That state invalidates prior packages in
+  an updated deployment or through a trusted monotonic authority; an offline
+  old binary cannot learn it and remains bounded only by compiled expiry and
+  any authority it was configured to require.
 - Monotonic policy-version and rollback/downgrade rejection.
 - Provenance equality and serialization test vectors.
 
@@ -363,7 +381,8 @@ Verification:
 
 - Inherited gate plus missing/contradictory provenance, forged capability,
   wrong-plan/environment/origin, stale digest, rollback, expiry, kill-switch,
-  and authorization-reuse tests.
+  authorization-reuse, freshness-downgrade, unavailable-time, stale-authority,
+  and wrong-registry authority tests.
 - Hostile downstream test package that invents IDs/origins/operations,
   implements the public contract, constructs dossier-shaped data, and attempts
   to forge an authorized execution, register an unreviewed plan, or substitute
@@ -448,8 +467,15 @@ Deliverables:
 
 - Independent wire/decoded consumable ledgers, chunk sink, completion state,
   and truncation detection.
-- Provisional stream state and non-forgeable finalized completion token
-  returned only by successful `finish()`.
+- Add the shared `no_std` borrowed-stream vocabulary to `sweden-core`, using
+  `EventFamily::Event<'event>` and
+  `EventSink<F>::on_event<'event>(F::Event<'event>)`. Decoder `push`/`finish`
+  invokes the synchronous visitor before returning, so the borrow cannot
+  escape. Async transports may invoke it while processing a chunk, but no
+  borrowed `Stream<Item = _>` is promised.
+- Separate non-forgeable `WireComplete`, `CodecComplete`, and
+  `SemanticComplete` states. Only their registry-bound combination can
+  construct final completion and `Complete` provenance.
 - No cache insertion, checkpoint/cursor advance, or `Complete` provenance from
   provisional events.
 - Explicit caller warning that acting on provisional events transfers
@@ -471,11 +497,14 @@ Verification:
 - Inherited gate plus exact-limit, one-byte-over, partial, repeated-completion,
   counter-overflow, valid-prefix/malformed-trailer, duplicate-late-field, and
   valid-prefix/truncation tests.
+- Compile tests proving a borrowed event cannot escape `on_event`, plus
+  forged/missing/reordered wire, codec, and semantic completion tests.
 
 Exit criteria:
 
 - No decoder can receive bytes that bypass the declared response budget, and
-  wire and decoded ceilings remain independently configurable.
+  wire and decoded ceilings remain independently configurable. `Complete`
+  provenance requires all three completion domains.
 - `v0.12.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.13.0 - JSON Lexical Layer
@@ -519,9 +548,12 @@ Deliverables:
   equivalent literal/escaped scalar spellings) are duplicates. Hash-only
   decisions are prohibited and every comparison/re-decode charges work units.
 - Exact consumption after permitted trailing whitespace.
-- Borrowed event stream with caller scratch for decoded strings.
-- Mandatory `finish()` returning finalized state only after exact complete
-  structure validation.
+- Borrowed `EventSink` callbacks with caller scratch for decoded strings; an
+  event cannot outlive its callback. Retention requires the bounded owned
+  `alloc` path.
+- Mandatory `finish()` returning `CodecComplete` only after exact complete
+  structure validation; it cannot manufacture wire or source-semantic
+  completion.
 - Source-decoder hooks.
 
 Verification:
@@ -530,6 +562,7 @@ Verification:
   structures, escaped-versus-literal duplicate spellings, colliding-key
   fixtures, scratch exhaustion, re-decode work exhaustion, and token-budget
   exhaustion tests.
+- Compile-fail borrowed-event escape tests and callback re-entry/abort tests.
 
 Exit criteria:
 
@@ -613,8 +646,8 @@ Deliverables:
 - Exact expanded-name matching, duplicate expanded-attribute rejection,
   reserved-prefix enforcement, exact-consumption, and duplicate singleton
   policy.
-- Borrowed event interface.
-- Mandatory `finish()` returning finalized state only after closing every
+- The same non-escaping borrowed `EventSink` interface as JSON.
+- Mandatory `finish()` returning `CodecComplete` only after closing every
   element and consuming the complete document.
 
 Verification:
@@ -658,6 +691,15 @@ Deliverables:
 - Create and publish the focused `sweden-testkit` crate.
 - Mock transport, scripted faults, bounded recording, replay metadata, and
   secret/header allowlists.
+- Recording is synthetic-only by default. Official response-body recording
+  requires the exact operation dossier to permit both retention and
+  redistribution; personal or sensitive classifications are unrecordable and
+  fail closed rather than relying on best-effort scrubbing.
+- Fixture metadata binds source, operation, schema, policy/evidence version,
+  retrieval date, data classification, and the reviewed retention and
+  redistribution decision.
+- Replay rejects an expired fixture, stale evidence, wrong source/operation,
+  schema or policy mismatch, and any classification/redistribution conflict.
 - Fail-closed recording for unknown header classes and transport conformance
   fixtures for redirect, proxy, decompression, cancellation, and truncation.
 - Closed adapter diagnostics that cannot preserve an arbitrary underlying
@@ -669,10 +711,13 @@ Verification:
 
 - Inherited gate plus self-tests proving redaction, limit enforcement, fault
   order, and replay determinism.
+- Explicit synthetic-default, official-denied, personal/sensitive-denied,
+  permitted-public, expired, and cross-operation replay cases.
 
 Exit criteria:
 
-- Tests cannot accidentally record credentials or unbounded payloads.
+- Tests cannot accidentally record credentials, protected official data, or
+  unbounded payloads, and a fixture cannot outlive its policy evidence.
 - `v0.19.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.20.0 - Source Onboarding Compiler
@@ -686,6 +731,9 @@ Deliverables:
   closed identifier constants for agency crates, documentation, and
   contradiction-test generation without placing source truth in
   `sweden-policy`.
+- Generated fixture-policy metadata and contradiction tests for data
+  classification, retention, redistribution, evidence expiry, and replay
+  compatibility.
 - Manifest hashes and generated-file headers.
 - Generated-file inventory with family-based splitting that keeps every Rust
   source file below 500 lines.
@@ -725,15 +773,28 @@ Deliverables:
   and fixtures, and is not a production facade feature.
 - Add a `sweden-registry` conformance feature that binds the synthetic
   profiles one-way without a dependency cycle.
-- Generic consumption of indivisible `AuthorizedExecution<R>` packages,
-  quota-lease state, late credential injection, redirect/retry state machines,
-  bound sink/decoder driving, and optional `alloc`-gated
+- Private non-cloneable state sequence:
+  `AuthorizedExecution<R> -> PolicyRevalidated<R> ->
+  QuotaLeaseAcquired<R> -> CredentialInjected<R> -> AttemptInFlight<R>`.
+  Authorization binds a quota requirement, not a pre-acquired lease.
+- Time-of-use revalidation of freshness requirement, expiry,
+  registry/policy version, revocation, kill switch, origin, and environment
+  before quota acquisition, credential acquisition, and I/O. Retry delays,
+  redirects, and page transitions must re-enter revalidation.
+- Late quota reservation and concurrency acquisition. Credential-provider
+  failure or final pre-I/O denial cancels the uncommitted attempt reservation,
+  releases concurrency at most once, and does not spend a network attempt.
+  The attempt is atomically committed immediately before transport handoff;
+  every later failure or ambiguous result spends it.
+- Bound sink/decoder driving and optional `alloc`-gated
   `Client<T, C, Q, P, K>` including the policy authority.
 - Synthetic source with open, denied, oversized, malformed, rate-limited, and
   stale-policy operations; no synthetic operation or decoder lives in the
   executor.
 - Blocking and async mock execution.
-- JSON and XML fixture paths.
+- JSON and XML `EventSink` fixture paths plus composite wire/codec/semantic
+  finalization; only the registered source validator can issue
+  `SemanticComplete`.
 - Generated docs, policy tests, expiry tests, authorization-consumption tests,
   and a deliberately non-conforming trusted-transport demonstration.
 - Dry-run admission and mock execution contracts for one attempt, concurrency,
@@ -748,14 +809,17 @@ Verification:
 - Inherited gate plus end-to-end allow/deny, provenance, redaction, and budget
   scenarios, provisional/finalized stream cases, hostile downstream authority
   attempts, decoder/validator/output substitution, semantic-validator bypass,
-  forged-finalization attempts, deadline-mode propagation, and preflight
-  corpus replay.
+  forged-finalization attempts, retained-authorization expiry/revocation,
+  freshness downgrade, stale authority, credential-provider failure,
+  reservation cancellation, double release, pre-handoff versus ambiguous
+  post-handoff failure, deadline-mode propagation, and preflight corpus replay.
 
 Exit criteria:
 
 - The local source exercises every shared boundary without external I/O, the
   conformance crate solely owns synthetic semantics, and the executor is the
-  sole owner of generic execution through an indivisible registered package.
+  sole owner of generic execution through an indivisible registered package
+  and the explicit time-of-use state sequence.
 - `v0.21.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.22.0 - Trafikverket Source Dossier
@@ -917,16 +981,22 @@ Deliverables:
   deadline limits charged before work.
 - Streaming-first explicit `next_page` contract; no `Iterator` hides I/O.
 - Resume and early-stop behavior, unchanged-cursor rejection, and bounded
-  cursor-cycle detection.
+  cursor-cycle detection using exact bounded cursor identities in
+  caller-provided scratch. A hash may index candidates but never decides
+  equality; exhausted history capacity stops conservatively before another
+  request.
 
 Verification:
 
 - Inherited gate plus zero/overflow, repeated cursor, endless source, early
-  stop, and each budget exhaustion test.
+  stop, exact-identity hash-collision, cursor-history exhaustion, and each
+  budget exhaustion test.
 
 Exit criteria:
 
 - No public all-pages helper exists without an explicit total budget.
+- Paging never relies solely on cursor hashes and cannot continue after it
+  loses the bounded evidence needed to rule out a cycle.
 - `v0.28.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.29.0 - Trafikverket Response Envelope
@@ -1126,6 +1196,9 @@ Deliverables:
 - Minimum interval, fixed window, token budget, concurrency, and daily cap
   semantics required by reviewed operations.
 - Idempotency-aware retries, `Retry-After`, jitter input, and total deadline.
+- A `429` or `Retry-After` may only delay, deny, or further restrict an
+  attempt. Neither can refund a spent ledger/attempt, replenish quota, reset a
+  window, or broaden a reviewed limit.
 - Retry authorization bound to method semantics, operation policy,
   `Replayable`/`OneShot` body state, and delivery ambiguity.
 - Non-cloneable rate/retry permits charged before each attempt and keyed by
@@ -1134,12 +1207,27 @@ Deliverables:
 - Stabilize the minimal `v0.9.0` `QuotaAuthority` contract and implement
   operation-selected interval, window, concurrency, and coordinated
   shared-quota algorithms.
-- Atomic quota/concurrency lease lifecycle with acquisition, fencing token,
-  at-most-once release, expiry, cancellation, and crash/restart recovery.
-  Ambiguous delivery spends the attempt; concurrency capacity recovers only
-  through an accepted fenced release or lease expiry.
+- Atomic two-phase quota/concurrency lifecycle: late reservation and fenced
+  concurrency acquisition, commit immediately before transport handoff,
+  at-most-once unused cancellation/release, expiry, and crash/restart
+  recovery. Credential-provider or pre-I/O policy failure cancels an
+  uncommitted reservation without spending an attempt; ambiguous delivery
+  after commit spends it. Concurrency recovers only through an accepted fenced
+  release or lease expiry.
 - Caller-injected monotonic time for deadlines, intervals, and backoff, plus
-  separately trusted UTC/civil time for calendar windows and policy expiry.
+  separately trusted time for policy expiry and a closed calendar-window
+  model: UTC-anchored, fixed-offset, or an opaque monotonically ordered
+  source-local window ID supplied by a trusted authority.
+- Fixed offsets never infer DST. Source-local/DST calendars require authority
+  window IDs because Sweden embeds no timezone database. Leap seconds never
+  create an extra reset; rollback cannot reopen an older window; restart must
+  restore the maximum persisted window/state or fail closed. Exact forward
+  jump, repeated-window, and boundary behavior is operation-dossier data.
+- Time-of-use policy revalidation immediately before credentials and I/O and
+  after retry waits, redirects, or page transitions. An expired/revoked,
+  killed, stale-authority, wrong-version, wrong-origin, or wrong-environment
+  package fails before another attempt, and callers cannot downgrade its
+  freshness requirement.
 - Explicit rollback, forward-jump, unavailable-time, and restart behavior,
   direct-mode advisory-per-client semantics, and fail-closed coordinated
   behavior when required time or quota authority is unavailable.
@@ -1153,15 +1241,19 @@ Deliverables:
 Verification:
 
 - Inherited gate plus deterministic clock, 429, limiter outage, concurrency,
-  atomic acquire/release, stale fencing, double release, lease expiry,
-  cancellation, crash/restart, retry storm, each deadline mode, and deadline
-  exhaustion tests.
+  two-phase reserve/commit/cancel, credential failure, stale fencing, double
+  release, lease expiry, cancellation, crash/restart, UTC/fixed-offset/source
+  window boundaries, DST authority transitions, leap-second input, rollback,
+  forward jump, 429 non-refund/non-broadening, retained authorization
+  expiry/revocation, retry storm, each deadline mode, and deadline exhaustion
+  tests.
 
 Exit criteria:
 
 - Retry behavior cannot exceed operation or source budgets, concurrency
   capacity recovers without double release, and no official network execution
-  bypasses the complete reviewed live gate.
+  bypasses the complete reviewed live gate or a fresh time-of-use policy
+  decision.
 - `v0.37.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.38.0 - Cache And Freshness Contracts
@@ -1304,6 +1396,9 @@ Deliverables:
 
 - Generated operation, access, rate, attribution, data-class, and compatibility
   tables.
+- Generated per-operation fixture recording/replay table covering synthetic
+  default, official retention, redistribution, classification, evidence
+  expiry, and unsupported recording.
 - Compile-tested examples labeled by `no_std/no_alloc`, `no_std+alloc`, `std`
   orchestration, or external-adapter capability tier, plus migration policy.
 - Current source dossier hashes.
@@ -1354,8 +1449,9 @@ Deliverables:
 
 - Dependency-DAG and ownership audit for core, policy, registry, HTTP,
   executor, codecs, conformance, Trafikverket, and facade.
-- Blocking/async parity for `AuthorizedExecution<R>` validation, quota-lease
-  consumption, late credentials, bound sink/decoder driving, and completion.
+- Blocking/async parity for authorization, time-of-use revalidation, late
+  quota reservation/commit, credential failure, in-flight ambiguity, bound
+  sink/decoder driving, and composite completion.
 - Compile-fail boundaries proving the facade contains wiring only, agency
   crates do not depend on HTTP/executor, and callers cannot construct
   authorized states.
@@ -1364,8 +1460,9 @@ Deliverables:
 Verification:
 
 - Inherited gate plus forbidden-edge, forged-state, registry/policy
-  version-skew, decoder/validator/output substitution, double-execution,
-  cancellation, and blocking/async equivalence tests.
+  version-skew, freshness downgrade, decoder/validator/output substitution,
+  skipped/reordered state, double-execution, cancellation, and blocking/async
+  equivalence tests.
 
 Exit criteria:
 
@@ -1386,6 +1483,9 @@ Deliverables:
 - Closed diagnostics, fixture/replay rejection, memory-lifetime guidance, and
   explicit residual exposure statement for arbitrary transports, panic/crash
   infrastructure, allocators, and the host process.
+- Credential-provider denial/failure occurs before attempt commit; the unused
+  reservation and concurrency lease follow the fenced at-most-once release
+  path without treating a provider lookup as an upstream request.
 - No hosted gateway-key or tenant credential surface.
 
 Verification:
@@ -1411,14 +1511,20 @@ Deliverables:
   attempt result, and body replayability.
 - Explicit `301`, `302`, `303`, `307`, and `308` handling. Method rewriting is
   denied unless the operation policy names it; method-preserving redirects
-  require a replayable body and fresh origin/policy/quota authority.
+  require a replayable body and a new time-of-use origin/policy revalidation
+  plus fresh quota authority.
 - Fragment rejection, bounded relative-location normalization, and no
   automatic credential forwarding.
+- Redirect canonicalization rejects or uniquely handles percent-encoded
+  separators/dot segments, duplicate query keys, backslashes,
+  Unicode-equivalent spellings, scheme-relative locations, and encoded
+  controls before any credential is acquired for the next hop.
 - Authorization challenges and adapter-side automatic authentication are
   returned as data/denied unless an operation-specific state transition
   explicitly admits them.
 - Bounded `Retry-After` delta-seconds and HTTP-date parsing using the correct
-  trusted clock domain.
+  trusted clock domain. It may only delay or deny; it never refunds an attempt,
+  restores a ledger/quota, or broadens operation policy.
 - Explicit ambiguous-delivery, authentication-challenge, cancellation, and
   partial-write states.
 
@@ -1426,8 +1532,10 @@ Verification:
 
 - Inherited gate plus consumed/one-shot resend compile failures, partial write,
   ambiguous result, every redirect status, forbidden/allowed method rewrite,
-  fragment, relative normalization, auth challenge, automatic auth,
-  `Retry-After`, redirect loop/cross-origin, and credential-forwarding tests.
+  fragment, encoded separator/dot segment/control, duplicate query,
+  backslash, Unicode-equivalent, scheme-relative, relative normalization,
+  auth challenge, automatic auth, `Retry-After` non-refund/non-broadening,
+  redirect loop/cross-origin, and credential-forwarding tests.
 
 Exit criteria:
 
@@ -1447,8 +1555,10 @@ Deliverables:
 - Re-audit atomic quota/concurrency leases across cancellation, expiry,
   duplicate release, stale fencing token, crash/restart, and ambiguous
   delivery; attempt capacity is not refunded after ambiguity.
-- Monotonic/civil clock behavior, source kill switch, policy-expiry transition,
-  and cache directive enforcement.
+- Re-audit UTC, fixed-offset, and authority-supplied source-local window IDs,
+  including DST, leap-second, rollback, forward-jump, and restart behavior.
+- Time-of-use policy revalidation, source kill switch, policy-expiry
+  transition, and cache directive enforcement.
 - Fail-closed coordination/store boundary for deployments that opt into shared
   quota state.
 - Deterministic outage, clock, restart, stampede, and quota-amplification
@@ -1498,7 +1608,7 @@ Deliverables:
 
 - Updated threat model, attack-surface inventory, abuse cases, and control map.
 - SSRF, parser, secret, executor authority, body replay, policy drift, rate,
-  cache, supply-chain, and release reviews.
+  cache, fixture retention/replay, supply-chain, and release reviews.
 - Explicit trust-boundary review separating Sweden-controlled validation from
   arbitrary transport, DNS, TLS, proxy, clock, credential-store, and
   deployment behavior.
@@ -1561,6 +1671,9 @@ Deliverables:
   public ceiling changes.
 - Non-`Copy`, non-`Clone` permits where copying would duplicate authority or
   budget.
+- State-transition accounting across authorization, policy revalidation,
+  uncommitted quota reservation, credential failure, attempt commit, in-flight
+  ambiguity, and fenced concurrency release.
 - Parent/child and cross-layer accounting tests proving that conversion
   between ledgers neither refunds nor double-spends capacity; ambiguous
   network results never refund an attempt permit.
@@ -1568,7 +1681,9 @@ Deliverables:
 Verification:
 
 - Inherited gate plus exact-limit, one-over, overflow, cancellation,
-  partial-progress, replay, and copied-state compile-fail cases.
+  partial-progress, replay, credential-provider failure, pre-handoff
+  cancellation, post-handoff ambiguity, double release, and copied-state
+  compile-fail cases.
 
 Exit criteria:
 
@@ -1626,6 +1741,9 @@ Deliverables:
 - Audit the existing generated private registry binding to source,
   operation, plan, environment, origin, reviewer trust root, policy/dossier
   identity, schema version, monotonic policy version, and review expiry.
+- Audit both registered freshness modes and immediate time-of-use revalidation
+  before credentials/I/O and after waits, redirects, retries, and page
+  transitions; callers can tighten but never downgrade them.
 - Audit `AuthorizedExecution<R>` binding of encoder, response profile,
   decoder, validator, output/provenance type, limits, and finalization through
   executor, retry, redirect, and next-page consumption.
@@ -1636,13 +1754,17 @@ Deliverables:
   supplies current revocation/kill-switch/version state.
 - Narrow rollback guarantee: preventing execution of an older binary requires
   an external authenticated monotonic policy authority.
+- Explicit offline qualification: publishing a registry/policy release cannot
+  remotely revoke an already deployed old binary; only its compiled expiry or
+  configured trusted authority can do so.
 - `IntegrationStatus` retained only as descriptive metadata.
 
 Verification:
 
 - Inherited gate plus stale digest, wrong operation, wrong environment, expiry,
-  schema drift, forged status, authorization reuse, absent authority, suppressed
-  revocation, policy rollback, and old-binary simulation tests.
+  schema drift, forged status, retained authorization, freshness downgrade,
+  absent/stale authority, suppressed revocation, policy rollback, checks after
+  delay/redirect/page transition, and old-binary simulation tests.
 
 Exit criteria:
 
@@ -1685,6 +1807,8 @@ Deliverables:
 
 - Caller-owned scratch and buffer sizing guidance for borrowed parsers and
   bounded sinks.
+- `EventSink` callback lifetime guidance and compile-tested sync/async bridge
+  examples; callers needing retention use explicit bounded owned events.
 - Stable `NeedRequestCapacity` and `NeedScratch`-style errors with computable
   minimum sizes before partial semantic commitment where feasible.
 - Per-operation maximum bytes, attempts, redirects, pages, records,
@@ -1771,7 +1895,8 @@ Goal: close technical and evidence gaps before legal/privacy readiness begins.
 Deliverables:
 
 - Operation-by-operation matrix linking code, policy, dossier, schema,
-  fixtures, resource ledgers, feature tier, documentation, and review expiry.
+  fixture classification/retention/replay decisions, resource ledgers,
+  freshness mode, feature tier, documentation, and review expiry.
 - Explicit unsupported and deferred inventory, including archive formats,
   dependencies, FFI, concrete network adapters, and post-1.0 agencies.
 - Current contradiction tests and plan/metadata consistency report.
@@ -1895,6 +2020,9 @@ Deliverables:
   regression scenarios.
 - Cross-process lease acquisition/release, fencing, expiry, duplicate release,
   authority restart, client crash, and ambiguous-delivery recovery scenarios.
+- UTC/fixed-offset/source-local window transitions across DST, rollback,
+  forward jump, leap-second input, and restart, plus retained-authorization
+  expiry/revocation during queued and retried work.
 - Updated deployment and capacity assumptions.
 
 Verification:

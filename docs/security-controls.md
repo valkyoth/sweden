@@ -25,6 +25,8 @@
 - decoded-name duplicate detection for JSON and explicit XML 1.0 lexical,
   QName, namespace, comment, CDATA, processing-instruction, declaration, and
   reference-digit budgets;
+- non-escaping borrowed `EventSink` callbacks and composite wire, codec, and
+  source-semantic completion before `Complete` provenance;
 - archive traversal and decompression-ratio controls where applicable;
 - no-panic arbitrary input evidence.
 
@@ -38,12 +40,29 @@
 - indivisible registry authorization binding the exact request encoder,
   response profile, decoder, validator, output/provenance type, limits, and
   finalization;
+- non-downgradable compiled-expiry or current-authority freshness revalidated
+  immediately before credentials/I/O and after waits, redirects, and pages;
+- distinct authorization, policy-revalidated, quota-reserved,
+  credential-injected, and attempt-in-flight states, with attempt commitment
+  only at transport handoff;
 - explicit deadline mode, retries, and rate budgets without claiming a clock
   can preempt a stalled transport;
 - complete reviewed interval/window/concurrency enforcement and fenced lease
   recovery; official network execution remains prohibited through `v0.36.0`;
 - response byte accounting before decode;
-- SSRF and credential-destination tests.
+- SSRF and credential-destination tests;
+- adversarial canonicalization tests for encoded separators/dot segments,
+  duplicate query keys, backslashes, Unicode-equivalent forms, fragments,
+  scheme-relative locations, and encoded controls.
+
+## Required Before Official Fixture Recording
+
+- synthetic-only recording by default;
+- explicit operation-level retention and redistribution permission;
+- fail-closed rejection of personal or sensitive body recording;
+- source, operation, schema, policy/evidence, retrieval, classification, and
+  redistribution metadata;
+- replay rejection after expiry or any operation/evidence mismatch.
 
 ## Required Before Hosted Multi-Tenancy
 

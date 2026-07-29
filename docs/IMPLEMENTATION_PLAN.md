@@ -69,6 +69,20 @@ its established scope or gates:
   mock, synthetic, and redistributable offline evidence exercise earlier
   milestones, and opt-in live execution begins only when `v0.37.0` supplies
   the complete reviewed quota/concurrency and time semantics;
+- accepted: registry authorization is not a timeless execution grant; every
+  attempt revalidates its registry-bound freshness mode, policy version,
+  revocation, kill switch, origin, and environment immediately before
+  credentials and I/O;
+- accepted: authorization, time-of-use policy validation, quota reservation,
+  credential injection, and an in-flight attempt are distinct non-cloneable
+  states; `AuthorizedExecution<R>` binds the quota requirement but never owns
+  a pre-acquired lease;
+- accepted: borrowed decoding uses a synchronous callback visitor whose event
+  borrow cannot escape the callback; async callers retain events only through
+  an explicit bounded owned `alloc` path;
+- accepted: fixture recording is synthetic-only by default and official
+  response retention is a dossier-governed, fail-closed capability rather than
+  a general testkit convenience;
 - accepted: configured limits become checked ledgers charged before I/O,
   allocation, parsing, retry, redirect, page fetch, or checkpoint advance;
 - accepted: local ledgers and coordinated quota authority are different
@@ -178,9 +192,10 @@ Five mechanisms remain distinct:
   and monotonic policy-version state;
 - `AuthorizedExecution<R>`: a one-use registry-created package binding the
   exact canonical plan, registered encoder/decoder/validator profile,
-  output/provenance type, finalization rules, policy, ledger, and required
-  quota authority. The executor never accepts an authorization token alongside
-  a separately caller-selected decoder or semantic validator.
+  output/provenance type, finalization rules, policy, ledger, and quota
+  requirement—but not an acquired quota lease. The executor never accepts an
+  authorization token alongside a separately caller-selected decoder or
+  semantic validator.
 
 A per-process limiter is described as advisory unless the dossier explicitly
 establishes that scope. Hosted or multi-process modes requiring coordinated
@@ -294,11 +309,11 @@ metadata changes. At `v1.0.0`, every crate then in the workspace converges to
 
 | Crate | Owns | Must not own |
 | --- | --- | --- |
-| `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan vocabulary, provenance | policy decisions, I/O, credentials, agency models |
+| `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan and borrowed-event/completion vocabulary, provenance | policy decisions, I/O, credentials, agency models |
 | `sweden-policy` | source-independent dossier evaluation, revocation/expiry logic, cache/quota requirement contracts | source registry data, transport calls, credentials, source decoding |
 | `sweden-registry` | generated closed membership, exact profile compatibility, opaque `AuthorizedExecution<R>` construction and consumption state | generic policy algorithms, transport calls, credentials, wire implementations |
 | `sweden-http` | blocking/async transport, response sink, redirect-as-data, safe transport codes | authorization, retries, credential injection, agency semantics |
-| `sweden-executor` | execution-state transitions, quota-lease consumption, late credentials, redirect/retry state machines, driving the behavior embedded in `AuthorizedExecution<R>`, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
+| `sweden-executor` | time-of-use revalidation, quota reservation/commit/release transitions, late credentials, redirect/retry state machines, driving the behavior embedded in `AuthorizedExecution<R>`, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
 | `sweden-conformance` | synthetic operations, encoders, decoders, validators, output types, and fixtures | registry authority, generic execution, production source claims |
 | Agency crate | typed operation metadata, inputs, encoding, decoding, semantic validation | authority issuance, sockets, TLS, generic execution, other agencies |
 | `sweden` | feature wiring, aliases, and re-exports | implementation logic |
@@ -342,7 +357,10 @@ Cargo type identity prevents packages from crossing crate versions, and
 runtime registry/policy version or digest mismatches fail closed. Adding a
 reviewed entry or feature requires a registry release. Removing an entry,
 changing security policy, or revoking evidence advances the monotonic
-registry/policy version and invalidates older authorization packages. No
+registry/policy version and invalidates older authorization packages inside an
+updated deployment or when a trusted monotonic `PolicyAuthority` reports that
+state. An offline old binary cannot learn a new revocation; it remains bounded
+only by its compiled expiry and any authority it was configured to require. No
 compatibility shim may translate an authorization package between registry
 versions.
 
@@ -367,9 +385,17 @@ advisory cost + reviewed maximum inspection
         ↓
 opaque registry-created AuthorizedExecution<R>
 binding exact encoder, decoder, validator, output,
-limits, evidence, quota lease, and finalization
+limits, evidence, quota requirement, and finalization
+        ↓
+PolicyRevalidated<R>
+        ↓
+QuotaLeaseAcquired<R>
         ↓
 late credential injection into a reviewed execution sink
+        ↓
+CredentialInjected<R>
+        ↓
+attempt admission committed as AttemptInFlight<R>
         ↓
 trusted caller-owned transport boundary
         ↓
@@ -379,6 +405,32 @@ bound source decoder and semantic validation
         ↓
 provenance-wrapped result
 ```
+
+Every live attempt traverses these private, non-`Copy`, non-`Clone` states.
+`PolicyRevalidated<R>` checks the bound freshness requirement, expiry,
+registry/policy version, revocation, kill switch, origin, and environment
+against trustworthy time and any required authority. The check occurs before
+quota acquisition, immediately before credential acquisition, and again
+before I/O; retry delays, redirects, and page transitions return to policy
+revalidation rather than reusing an earlier decision. Callers may tighten a
+freshness requirement but cannot downgrade it.
+
+The closed freshness requirement is either
+`CompiledUntil { not_after }`, which requires trustworthy current time and
+fails after the compiled evidence expiry, or
+`CurrentAuthorityRequired { minimum_version, maximum_staleness }`, which also
+requires a current authenticated authority observation. Staleness is measured
+from that observation with trustworthy monotonic time. Missing, rolled-back,
+wrong-registry, or overly stale authority state fails closed.
+
+`QuotaLeaseAcquired<R>` is an uncommitted attempt reservation plus concurrency
+lease acquired as late as possible. Credential-provider failure or a final
+pre-I/O policy denial cancels the unused reservation and releases concurrency
+at most once; it does not spend a network-attempt budget. Transition to
+`AttemptInFlight<R>` atomically commits the attempt immediately before the
+transport handoff. From that handoff onward, cancellation, failure, or
+ambiguous delivery spends the attempt, while concurrency is recovered only by
+a fenced release or expiry.
 
 Every blocking, async, mock, borrowed, owned, and custom-transport path starts
 with the same typed operation and canonical plan. Convenience APIs may
@@ -397,10 +449,10 @@ pagination abstraction erases upstream semantics.
 The API must make it impossible to select an arbitrary production origin.
 Credentials are inserted only after the origin is validated and are excluded
 from debug output, cache keys, canonical hashes, errors, and fixtures.
-Authorized executions and their attempt/quota leases are non-`Copy`,
-non-`Clone`, operation-, environment-, and origin-bound, and consumed by
-execution. Retries, redirects, and subsequent pages require fresh charges and
-authorization.
+Authorized executions, revalidated states, quota reservations/leases,
+credential-injected states, and in-flight attempts are non-`Copy`,
+non-`Clone`, operation-, environment-, and origin-bound. Retries, redirects,
+and subsequent pages require fresh checks, charges, and authorization.
 
 A caller-owned transport can still copy credentials, ignore deadlines, choose
 another destination, or log data. Sweden does not claim to sandbox arbitrary
@@ -426,6 +478,13 @@ source dossier:
    and time budgets.
 6. Build synthetic fixtures before admitting redistributable official
    fixtures.
+   Recording is synthetic-only by default. An official response may be
+   retained only when its operation dossier explicitly permits retention and
+   redistribution; personal or sensitive classifications fail closed instead
+   of relying on best-effort scrubbing.
+   Recorded metadata binds source, operation, schema, policy, retrieval time,
+   classification, and the retention/redistribution decision. Replay rejects
+   an expired or mismatched fixture.
 7. Implement generated policy contradiction tests, request goldens, and
    negative parser tests before live execution.
 8. Keep official network execution disabled through `v0.36.0`; use mock,
@@ -459,12 +518,20 @@ static `no_std` code cannot guarantee deployment freshness.
 The no-third-party rule requires focused first-party codecs. They are not
 general-purpose replacements for ecosystem parsers.
 
-Streaming events are provisional until `finish()` validates the complete
-envelope, exact consumption, trailers, and truncation state and returns a
-non-forgeable finalized completion token. Provisional data cannot produce
-`Complete` provenance, enter a cache, or advance a cursor/checkpoint. Callers
-that act on provisional events before finalization explicitly own the
-downstream rollback/compensation risk.
+Borrowed streaming uses a synchronous GAT-based visitor contract:
+`EventFamily::Event<'event>` and
+`EventSink<F>::on_event<'event>(F::Event<'event>)`. Decoder `push`/`finish`
+invokes the visitor before returning, so the borrow cannot escape the
+callback. Async transports may drive the same visitor while handling a chunk,
+but there is no `Stream<Item = Event<'_>>` claim. Callers that must retain
+events opt into an explicit bounded owned `alloc` path.
+
+Streaming events remain provisional until three independently non-forgeable
+states exist: wire completion, codec completion, and registered
+source-semantic completion. Only their registry-bound combination constructs
+`Complete` provenance. Provisional data cannot enter a cache or advance a
+cursor/checkpoint. Callers that act on provisional events before composite
+finalization explicitly own the downstream rollback/compensation risk.
 
 JSON work is split into:
 
@@ -577,6 +644,13 @@ discovery and redirects by default, avoid unmetered decompression and
 buffering, and translate adapter errors immediately into closed safe
 categories. These are conformance properties, not guarantees about arbitrary
 implementations.
+
+Canonicalization and redirect fixtures cover encoded separators and dot
+segments, duplicate query keys, backslashes, Unicode-equivalent spellings,
+fragments, scheme-relative locations, and encoded controls. Every case is
+either uniquely represented by the operation grammar or rejected before
+credential injection; generic URL normalization is not delegated to the
+transport.
 
 A clock value alone never creates a hard deadline. A blocking transport that
 does not return and an async transport that never wakes cannot be preempted by
@@ -727,10 +801,15 @@ The granular version sequence and exact stop language live in
   documented without cryptographic-sandbox claims;
 - operation-level policy, dossier, provenance, and expiry evidence gates every
   stable capability;
+- every attempt passes non-downgradable time-of-use freshness revalidation,
+  late quota reservation, and atomic pre-handoff attempt commitment;
 - downstream operation implementations and descriptive IDs cannot mint
   registry membership or execution authority;
-- provisional stream events cannot create complete provenance, cache entries,
-  or checkpoint advances before successful finalization;
+- borrowed events cannot escape their visitor callback, and provisional stream
+  events cannot create complete provenance, cache entries, or checkpoint
+  advances before wire, codec, and source-semantic finalization;
+- official fixtures are retained/replayed only under current operation-level
+  classification, retention, redistribution, and evidence decisions;
 - external clock, quota, policy, credential, cache/state, and kill-switch
   authority trust is documented and tested without extending Sweden-owned
   guarantees to arbitrary implementations;
