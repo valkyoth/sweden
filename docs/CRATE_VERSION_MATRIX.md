@@ -1,6 +1,6 @@
 # Crate Version Matrix
 
-Status: `v0.2.0` implementation complete; awaiting maintainer pentest
+Status: `v0.2.0` pentest passed; awaiting green GitHub Actions and CodeQL
 
 Sweden uses independent crate versions. The `sweden` facade is the release
 clock and always has exactly the version represented by the repository tag.

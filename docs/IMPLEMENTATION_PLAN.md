@@ -4,7 +4,8 @@ Status: repository foundation implemented; product capabilities planned
 
 Repository and facade crate: `sweden`
 
-Current workspace version: `0.2.0` release candidate
+Current workspace version: `0.2.0` release candidate; pentest passed; awaiting
+green GitHub Actions and CodeQL
 
 Production target: `1.0.0`
 

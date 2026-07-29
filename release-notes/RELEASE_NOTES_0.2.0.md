@@ -1,6 +1,6 @@
 # Sweden 0.2.0 Release Notes
 
-Status: implementation complete; awaiting maintainer pentest
+Status: pentest passed; awaiting green GitHub Actions and CodeQL
 
 ## Scope
 
@@ -64,9 +64,9 @@ cargo deny check
 cargo audit
 ```
 
-The implementation and `AWAITING PENTEST` report form the exact maintainer
-pentest baseline. GitHub and tagging remain pending until the normal workflow
-is completed.
+The implementation baseline, findings, remediation, and green maintainer
+retest are recorded in `security/pentest/v0.2.0.md`. GitHub and tagging remain
+pending until the normal workflow is completed.
 
 ## Known Limitations
 

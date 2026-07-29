@@ -1,7 +1,7 @@
 # Sweden Release Plan To 1.0
 
-Status: planning document; `v0.1.0` released; `v0.2.0` implementation is at
-the maintainer pentest stop
+Status: planning document; `v0.1.0` released; `v0.2.0` pentest passed and the
+release candidate awaits green GitHub Actions and CodeQL
 
 This plan is deliberately granular. Each version is one bounded review and
 pentest pass. Split a version or add a patch release whenever its scope stops

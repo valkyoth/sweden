@@ -35,10 +35,11 @@ access to Swedish public APIs and datasets. Shared logic is dependency-free,
 future networking is isolated in focused `std` crates and is never enabled by
 default.
 
-The repository is at its `0.2.0` identifier/version milestone and awaits the
-maintainer pentest. It contains only the two crates needed now: `sweden-core`
-and the `sweden` facade. It does not make real upstream requests, and no agency
-integration has been introduced.
+The repository is at its `0.2.0` identifier/version milestone. The maintainer
+pentest and retest passed; the release candidate now awaits green GitHub
+Actions and CodeQL. It contains only the two crates needed now:
+`sweden-core` and the `sweden` facade. It does not make real upstream requests,
+and no agency integration has been introduced.
 
 ## Install
 
