@@ -27,6 +27,8 @@ Status: foundation model extended for the planned registry/executor boundary
   capacity/partition cardinality.
 - Provider-session binding epoch/generation integrity, one-use non-secret
   binding tokens, and current same-partition access assertion at cached return.
+- Finite one-way provider access-rebind capacity and parent cache-work
+  continuity across every changed-partition lookup.
 - Full cache-fill shareability identity, monotonic publication fencing,
   entry-revision compare-and-swap, and idempotent publication/release.
 - Non-secret credential binding identity/generation/expiry and matching
@@ -78,6 +80,9 @@ Status: foundation model extended for the planned registry/executor boundary
 - A provider reusing a binding epoch/generation or consumed token after
   restart, reset, wrap, or ABA; revoking/changing entitlement while cache
   lookup/fill/`304` waits; or becoming unavailable before protected return.
+- A fast provider alternating access partitions, expiry, session epochs, or
+  restart signals to create an unbounded revalidation/relookup CPU loop,
+  replenish cache-work capacity, or recover an earlier candidate.
 - Concurrent callers stampeding one lawful cache miss, retaining quota/secrets
   while waiting, or exploiting cancelled/expired cache-fill leadership to
   bypass fencing.
@@ -137,6 +142,9 @@ Status: foundation model extended for the planned registry/executor boundary
 - Earlier credential binding through cache/network waits to a fresh
   same-partition provider assertion and private `AccessRevalidated<R>` before
   protected cached return.
+- Provider-driven changed-partition/restart state through one
+  `AccessRebindLedger` and the original parent `CacheLookupWork` to bounded
+  relookup or closed `AccessUnstable`.
 - Provider/registry-derived access binding through bounded cache lookup,
   current hit permission, and store replacement/purge.
 - Retained authorization to immediate policy freshness revalidation.
@@ -207,6 +215,11 @@ Status: foundation model extended for the planned registry/executor boundary
   Restart/reset/wrap/replay/mismatch reselects; every protected cached return
   revalidates current provider access, requires the same partition, and
   restarts lookup or denies on change/unavailability.
+- Registry-bound `AccessRebindLimit` becomes one executor-owned non-cloneable
+  ledger. Provider access reselection pre-charges it and repeated lookup
+  pre-charges the unchanged parent cache-work ledger; expiry, epoch churn,
+  restart, fill/`304` waits, and `CacheOnly` cannot replenish either.
+  Exhaustion discards the candidate as `AccessUnstable` and never falls back.
 - Explicit `NoCache` plus blocking/async store contracts bound candidate count
   and comparison work, require atomic complete replacement/purge and safe
   errors, and leave permission/identity decisions in the executor.
@@ -317,6 +330,9 @@ Status: foundation model extended for the planned registry/executor boundary
   forever, and an arbitrary credential provider may lie about session epochs,
   generations, binding/entitlement, retain secret material/tokens, or stall
   forever; traits do not sandbox either.
+- A malicious provider can deliberately exhaust the finite rebind/cache-work
+  ledgers and deny service, but cannot make Sweden loop without those
+  consumable bounds or authorize fallback to a prior partition.
 - `BodyWireBytes` excludes TLS, HTTP transfer/framing, headers,
   retransmissions, and other network overhead; actual bandwidth enforcement
   remains a transport/deployment guarantee, and arbitrary transports may lie

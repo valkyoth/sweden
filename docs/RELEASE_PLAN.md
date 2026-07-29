@@ -170,11 +170,18 @@ Deliverables:
 - Separation between configured ceilings and consumable remaining state.
 - Work-unit and allocation-count primitives for paths that byte ceilings alone
   do not bound.
+- Generic checked non-cloneable `RestartLedger<Tag>` primitive with typed
+  consumption domains, pre-charge semantics, child/parent continuity, stable
+  exhaustion, and no refund/recreation on a restart. A tag grants no
+  authority; later registry/executor milestones privately specialize it as
+  `AccessRebindLimit`/`AccessRebindLedger`.
 - No panics or unchecked arithmetic on caller input.
 
 Verification:
 
-- Inherited gate plus minimum, maximum, overflow, and one-past-boundary tests.
+- Inherited gate plus minimum, maximum, overflow, one-past-boundary,
+  pre-charge, copied-ledger compile-fail, restart-without-refund, and
+  parent-continuity tests.
 - Deterministic arbitrary-value constructor sweep.
 
 Exit criteria:
@@ -306,6 +313,9 @@ Deliverables:
   quota pooling. Anonymous public data may use a registry global partition;
   credentialed data requires a provider entitlement partition. Caller local
   namespaces may narrow but never merge or broaden authoritative partitions.
+- Closed operation-level `AccessRebindLimit` policy requirement; callers may
+  tighten it but cannot raise it, disable its exhaustion, or substitute the
+  total deadline as the only provider-driven restart bound.
 - Closed `DataHandlingProfile` requirements for classification, cache,
   recording, transformation, redistribution/export, retention/purge, and
   sensitive generated-field diagnostics.
@@ -316,7 +326,8 @@ Deliverables:
 
 Verification:
 
-- Inherited gate plus exhaustive allow/deny matrix tests.
+- Inherited gate plus exhaustive allow/deny matrix tests, including finite,
+  zero/deny, caller-tightened, caller-raised, and missing access-rebind limits.
 - Compile-fail construction tests for authority state plus hostile descriptive
   operation implementations that remain non-authoritative.
 - Confirm missing fields never produce permissive defaults.
@@ -346,6 +357,8 @@ Deliverables:
   including entitlement-preserving versus entitlement-changing rotation,
   anonymous/authenticated transitions, retention/purge, and sensitive-field
   behavior.
+- Required finite access-rebind ceiling for credentialed cache behavior,
+  including closed `AccessUnstable` exhaustion and no prior-partition fallback.
 - Standard cryptographic digests computed by pinned offline tooling and
   represented as opaque reviewed values in portable code.
 - Reviewer/trust-root binding, monotonic policy version, downgrade/rollback
@@ -354,7 +367,8 @@ Deliverables:
 
 Verification:
 
-- Inherited gate plus malformed corpus, depth/size limits, and round trips.
+- Inherited gate plus malformed corpus, depth/size limits, round trips, and
+  missing/duplicate/overflow/contradictory access-rebind ceilings.
 - No build-time network and no parser panic on arbitrary bytes.
 
 Exit criteria:
@@ -394,8 +408,9 @@ Deliverables:
   production partition.
 - Cache authority binds the exact generated `DataAccessScope`, opaque
   `AccessPartitionId` recipe, cache permission/mode, canonical identity fields,
-  classification, and `DataHandlingProfile`. Quota and access partition types
-  are not interchangeable.
+  classification, `DataHandlingProfile`, and reviewed `AccessRebindLimit`.
+  Quota and access partition types are not interchangeable, and callers cannot
+  replace the limit or supply a pre-filled restart ledger.
 - Minimal dependency-free non-secret cache entry/identity/lookup vocabulary,
   global anonymous access-partition construction, bounded collision-candidate
   and comparison-work limits, safe store codes, and `NoCache` marker for the
@@ -483,7 +498,8 @@ Verification:
   substitution, incomplete data-handling profile, excess cache candidates/
   comparison work, forged cache trust/epoch, duplicate exact candidates,
   fill-identity dimension omission, binding epoch reset/wrap/replay, token
-  clone/serialization/reuse, and `Finalized<R>` serialization/
+  clone/serialization/reuse, missing/unbounded/raised access-rebind limit,
+  caller-ledger substitution, and `Finalized<R>` serialization/
   deserialization-attempt compile-fail tests.
 - Hostile downstream test package that invents IDs/origins/operations,
   implements the public contract, constructs dossier-shaped data, and attempts
@@ -1008,12 +1024,18 @@ Deliverables:
   path; untrusted persisted bytes cannot become a hit or `304` base, and
   duplicate exact matches fail closed.
 - Before any credential-partitioned cache hit, fill-waiter result, or `304`
-  return, consume the earlier binding and obtain a fresh provider access
-  assertion. `AccessRevalidated<R>` is constructed only for a current
+  return, pre-charge the registry-bound `AccessRebindLedger`, consume the
+  earlier binding, and obtain a fresh provider access assertion.
+  `AccessRevalidated<R>` is constructed only for a current
   epoch/generation/expiry and the identical `AccessPartitionId`; changed
-  partition discards the candidate and restarts bounded lookup, while provider
-  unavailability fails closed. Anonymous global cache data uses the
-  registry-owned assertion through the same state.
+  partition discards the candidate and pre-charges repeated lookup against the
+  same parent `CacheLookupWork`. Neither ledger is recreated or refunded.
+  Exhaustion returns closed `AccessUnstable` with no earlier-partition/
+  candidate fallback, while provider unavailability fails closed. Anonymous
+  global cache data uses the registry-owned assertion through the same state.
+- The same rebind ledger spans immediate hits, fill waits, repeated expiry/
+  epoch/provider-restart cycles, `304`, and `CacheOnly`; the total deadline is
+  defense in depth rather than the sole fast-loop bound.
 - `CacheResolved<R>` derives permission/identity from the registered
   `DataAccessScope`, binding, and `DataHandlingProfile`. Fresh, stale-within,
   cache-only, miss, and `304` paths revalidate kill switch, cache permission,
@@ -1087,9 +1109,11 @@ Verification:
   identity mismatch, accidental shared cache store, candidate/work overflow,
   partial/failed store replacement and purge, fresh/stale/cache-only/miss
   revalidation, cache-wait binding expiry/revocation/generation change/
-  provider restart/unavailability, changed-partition lookup restart, forged
-  cache trust, restart/epoch mismatch, future cache time, duplicate exact
-  candidates, phase-specific deadline/cancellation cleanup,
+  provider restart/unavailability, A/B partition oscillation, repeated expiry/
+  epoch churn, changed-partition lookup restart, rebind exact-limit/one-over,
+  parent-cache-ledger continuity, `AccessUnstable` no-fallback, `CacheOnly`,
+  forged cache trust, restart/epoch mismatch, future cache time, duplicate
+  exact candidates, phase-specific deadline/cancellation cleanup,
   reservation cancellation, double release, pre-handoff versus ambiguous
   post-handoff failure, crash between quota commit and transport invocation,
   sink continue/pause/stop/abort/panic, cross-execution/cross-codec witness
@@ -1171,6 +1195,10 @@ Deliverables:
   fresh same-partition provider assertion. Changed entitlement repeats bounded
   lookup under the new partition; expiry, revocation, epoch mismatch, restart,
   or provider unavailability denies cached return.
+- Trafikverket's generated registry entry fixes a finite
+  `AccessRebindLimit`. Provider reselection and changed-partition relookup
+  consume the executor's one shared restart/cache-work ledgers in every cache
+  mode; `AccessUnstable` cannot revive an earlier entry.
 - Separate one-use `SecretLease` materialization validates the binding after
   quota wait and immediately before injection; expiry/revocation/generation or
   partition change restarts selection without sending.
@@ -1187,8 +1215,9 @@ Verification:
   forged quota/access partition values, public/authenticated transitions,
   changed-entitlement rotation, queued binding expiry, provider revocation,
   binding epoch/generation ABA, consumed-token replay, cache-wait access
-  revalidation/unavailability, changed-partition lookup restart, secret-lease
-  mismatch, and secret-derived-partition denial.
+  revalidation/unavailability, changed-partition lookup restart, A/B
+  oscillation, repeated expiry/epoch/restart, `AccessUnstable` no-fallback,
+  secret-lease mismatch, and secret-derived-partition denial.
 
 Exit criteria:
 
@@ -1666,6 +1695,11 @@ Deliverables:
   entitlement invalidates the old assertion. A fresh assertion at a newer
   generation may proceed only for the same access partition; a new partition
   restarts bounded lookup.
+- Every provider access revalidation/reselection pre-charges one shared
+  `AccessRebindLedger`; every changed-partition relookup also charges the
+  original parent cache-work ledger. No hit, fill waiter, `304`, or
+  `CacheOnly` branch creates fresh capacity. Exhaustion is `AccessUnstable`,
+  discards the candidate, and never falls back to a prior partition.
 - Representation-affecting request headers are exact canonical-key or reviewed
   `Vary` dimensions, while credentials, framing, diagnostics, and validator
   values are excluded from the base key.
@@ -1707,9 +1741,11 @@ Verification:
   duplicate exact candidates, untrusted-persistence/forged-authentication,
   cache rollback/forward jump/restart/epoch mismatch/future timestamp/shared
   process skew, binding expiry/revocation/generation/epoch/provider restart
-  during every cache wait and `304`, changed-partition restart,
-  concurrent-`304` revision races, partial replacement, purge failure, store
-  safe-error collapse, and blocking/async parity.
+  during every cache wait and `304`, A/B partition oscillation, rapid provider
+  restart, repeated expiry/epoch churn, changed-partition restart,
+  `AccessUnstable` exact-limit/one-over/no-fallback, parent-ledger preservation,
+  `CacheOnly`, concurrent-`304` revision races, partial replacement, purge
+  failure, store safe-error collapse, and blocking/async parity.
 
 Exit criteria:
 
@@ -1916,9 +1952,10 @@ Deliverables:
   subdivide, or multiply the dossier-generated production partition.
 - Cache/access audit proving the executor derives authoritative partitions,
   bounds candidate/comparison work, owns validator selection, revalidates
-  provider access before protected returns, derives complete fill identity,
-  owns fenced revisioned publication, and exposes storage only through
-  explicit blocking/async/`NoCache` contracts.
+  provider access before protected returns, preserves one parent cache-work
+  ledger and executor-owned `AccessRebindLedger` across every restart, derives
+  complete fill identity, owns fenced revisioned publication, and exposes
+  storage only through explicit blocking/async/`NoCache` contracts.
 - Compile-fail boundaries proving the facade contains wiring only, agency
   crates do not depend on HTTP/executor, and callers cannot construct
   authorized states.
@@ -1933,9 +1970,9 @@ Verification:
   substitution, every status-outcome substitution, forged/changed quota
   partition, forged/merged/cross-credential access partition, shared-store
   collision amplification, skipped cache/access revalidation, partial fill
-  identity, unfenced/stale/revision-bypassing publication, binding/secret
-  phase reorder, double-execution, cancellation, and blocking/async
-  equivalence tests.
+  identity, rebind-ledger replacement/refund/bypass, unfenced/stale/
+  revision-bypassing publication, binding/secret phase reorder,
+  double-execution, cancellation, and blocking/async equivalence tests.
 
 Exit criteria:
 
@@ -1967,6 +2004,9 @@ Deliverables:
   assertion must produce `AccessRevalidated<R>` for the same partition.
   Changed entitlement restarts bounded lookup; expiry, revocation, restart, or
   provider unavailability denies the protected cached return.
+- Audit the finite registry-bound `AccessRebindLimit`, executor-private ledger,
+  unchanged parent cache-work ledger, pre-charge ordering, `AccessUnstable`
+  no-fallback result, and identical behavior in `CacheOnly`.
 - After quota wait and final policy check, a one-use `SecretLease` must attest
   the exact binding and is injected immediately without persistence or retry
   reuse.
@@ -1989,6 +2029,8 @@ Verification:
   plus queued expiry, revocation, changed/unchanged-entitlement rotation,
   aliases, forged/cross-type IDs, binding epoch reset/wrap/replay, token reuse,
   cache-wait provider restart/unavailability, changed-partition lookup restart,
+  A/B oscillation, repeated expiry/epoch churn, rebind exact-limit/one-over,
+  parent-ledger replacement/refund attempts, `AccessUnstable` fallback denial,
   generation mismatch, late materialization/injection failure, partition
   explosion, secret residence/lifetime, and multiple-client quota/access
   continuity.
@@ -2159,9 +2201,9 @@ Deliverables:
   ownership, cache-validator insertion, body-wire versus network-byte claims,
   data-access partition isolation, explicit cache-store boundary/collision
   work, provider-session binding epochs/one-use tokens/post-wait access
-  revalidation, full fill identity/fenced revisioned publication, two-phase
-  credential binding/secret materialization, XML work/progress, executable
-  data handling,
+  revalidation and bounded rebind/relookup ledgers, full fill identity/fenced
+  revisioned publication, two-phase credential binding/secret materialization,
+  XML work/progress, executable data handling,
   conformance-versus-corpus replay, fixture retention expiry, supply-chain,
   and release reviews.
 - Residual-race review documenting that final pre-I/O policy revalidation is
@@ -2227,6 +2269,10 @@ Deliverables:
   units, XML work/progress, cache candidates/comparisons, total entries,
   owned/encoded cache bytes, key/validator bytes, access-partition
   cardinality, eviction/purge/expired-entry cleanup, and checkpoints.
+- Include provider binding/access revalidation and restart cycles:
+  `AccessRebindLedger` is charged before provider reselection, repeated lookup
+  consumes the unchanged parent `CacheLookupWork`, and neither capacity can be
+  refunded or replaced by a new ledger.
 - Conforming cache stores declare those capacities and return stable
   `StoreFull`; provider-driven authoritative/local partition explosion fails
   before unbounded allocation. All eviction, purge, and cleanup scans consume
@@ -2269,9 +2315,11 @@ Verification:
   exhaustion, cache candidate/comparison amplification, exact `StoreFull`
   boundaries, byte/key/validator/partition cardinality, bounded
   eviction/purge/cleanup, insertion-versus-required-purge failure, binding
-  epoch/access-reselection/token consumption, stale-fence/revision-race/
-  duplicate-publication/cancel-after-response accounting, binding restart/
-  secret-lease lifetime, and lying-adapter accounting cases.
+  epoch/access-reselection/token consumption, A/B partition oscillation,
+  rebind exact-limit/one-over, parent cache-work continuity, no-fallback
+  `AccessUnstable`, stale-fence/revision-race/duplicate-publication/
+  cancel-after-response accounting, binding restart/secret-lease lifetime,
+  and lying-adapter accounting cases.
 
 Exit criteria:
 
@@ -2336,6 +2384,10 @@ Verification:
   material, reset/reuse an epoch or generation, replay a consumed binding
   token, disappear during access revalidation, or conflate entitlement with
   quota pool.
+- Fast malicious provider doubles alternating A/B access partitions, expiring
+  every assertion, churning epochs, or repeatedly reporting restart; each is
+  bounded by `AccessRebindLedger` before the total deadline and cannot obtain a
+  fresh parent cache-work ledger or fallback candidate.
 - Cache stores that return excess/colliding candidates, partial entries,
   duplicate exact matches, cross-access data, stale handling metadata,
   forged trust/epoch/expiry, future timestamps, capacity lies, accept a stale
@@ -2652,6 +2704,10 @@ Deliverables:
 - Provider restart, binding-epoch replacement, generation reset/wrap/replay,
   entitlement change during lookup/fill wait, and protected-cache denial while
   provider access revalidation is unavailable.
+- Recovery from `AccessUnstable` after A/B oscillation, rapid restart, repeated
+  expiry, or epoch churn starts only a caller-authorized new execution with
+  fresh top-level limits; the failed execution cannot revive an old partition,
+  candidate, or ledger.
 - Expired-leader late publication, leader/takeover and concurrent-`304` races,
   store restart between fill and publication, stale entry revision, and
   idempotent retry recovery without accepting an old fence.
@@ -2665,7 +2721,8 @@ Verification:
   persistence authority restart/rollback/unavailability, shared-process skew,
   fill-leader takeover/late write, publication/store restart, concurrent
   revision changes, provider restart/binding ABA, entitlement change, access
-  revalidation outage, and capacity recovery.
+  revalidation outage, A/B oscillation, rapid expiry/epoch churn,
+  `AccessUnstable` no-fallback, parent-ledger continuity, and capacity recovery.
 
 Exit criteria:
 
@@ -2740,6 +2797,10 @@ Deliverables:
 - Protected cache returns after coordinated lookup/fill/`304` waits revalidate
   the provider-session epoch/generation/expiry and same access partition;
   provider restart/unavailability or binding ABA denies or restarts safely.
+- Seeded multi-process provider oscillation/restart/expiry storms prove each
+  execution retains one parent cache-work ledger and one finite
+  `AccessRebindLedger`; coordinated topology cannot multiply restart capacity
+  through clients, processes, `CacheOnly`, or fill waiters.
 - Full `CacheFillIdentity` prevents cross-namespace/environment/origin/version/
   handling/representation/transform coalescing. Coordinated monotonic fences,
   entry-revision CAS, expired-leader takeover, late publication, idempotent
@@ -2764,8 +2825,9 @@ Verification:
   deployment ceilings are never exceeded by reviewed coordinated execution,
   including partition-explosion, rotation/alias/entitlement storms,
   cross-access shared-store attempts, queued-binding expiry, provider-session
-  ABA, partial fill identity, stale publication fence/revision, and
-  expired-leader/store-restart races.
+  ABA, access-partition oscillation, restart-ledger multiplication attempts,
+  partial fill identity, stale publication fence/revision, and expired-leader/
+  store-restart races.
 
 Exit criteria:
 
@@ -2958,7 +3020,8 @@ Deliverables:
   with no generic status, caller partition, or network-bandwidth escape claim.
 - Frozen `DataAccessScope`/`AccessPartitionId`, cache-store/`NoCache` generic
   and state transitions, `AccessRevalidated<R>`, provider-session binding
-  epoch/one-use token, `CacheFillIdentity`, publication fence/entry revision,
+  epoch/one-use token, `AccessRebindLimit`/`AccessRebindLedger`/
+  `AccessUnstable`, `CacheFillIdentity`, publication fence/entry revision,
   credential-binding/`SecretLease` phases, `DataHandlingProfile`, and XML
   work/progress contracts.
 - Documentation/examples checked against the same generated metadata.

@@ -90,6 +90,13 @@
   hit/fill-waiter/`304` return; only the same current `AccessPartitionId` may
   proceed, changed entitlement restarts lookup, and provider unavailability
   denies protected cached data;
+- registry-bound finite `AccessRebindLimit` and non-cloneable
+  `AccessRebindLedger`, pre-charged before every provider access reselection;
+  changed-partition lookup consumes the same parent cache-work ledger;
+- `AccessUnstable` on exhaustion with candidate discard and no fallback to an
+  earlier partition, entry, or fresh ledger within that execution; A/B
+  oscillation, repeated expiry, epoch churn, provider restart, fill waits,
+  `304`, and `CacheOnly` all share the same limit;
 - explicit `NoCache` default plus blocking/async cache-store boundary with
   bounded collision candidates/comparison work, atomic replacement/purge,
   safe errors, and current permission/access/classification revalidation on

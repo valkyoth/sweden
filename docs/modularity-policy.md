@@ -12,8 +12,8 @@ Rules:
   registry, executor, HTTP, or one another.
 - `sweden-policy` owns source-independent policy algorithms and contracts,
   including closed response-outcome, quota/data-access scope, and
-  data-handling vocabulary, never generated agency/source membership or
-  production partition identity.
+  data-handling/access-rebind-limit vocabulary, never generated agency/source
+  membership or production partition identity.
 - `sweden-registry` owns generated source-specific entries and may depend
   one-way on a selected agency or conformance crate behind a matching feature;
   source crates never depend back on the registry.
@@ -21,21 +21,26 @@ Rules:
   caller-authority state into non-serializable epoch-specific observations.
 - `sweden-registry` binds each operation's exact status/outcome profile and
   generated `QuotaScope`, `DataAccessScope`, global anonymous/provider
-  partition recipe, `DataHandlingProfile`, and opaque full-shareability
-  `CacheFillIdentity`; callers cannot replace them with generic handlers,
-  partial fill keys, or free-form production partitions.
+  partition recipe, `DataHandlingProfile`, finite `AccessRebindLimit`, and
+  opaque full-shareability `CacheFillIdentity`; callers cannot replace them
+  with generic handlers, restart ledgers, partial fill keys, or free-form
+  production partitions.
 - `sweden-executor` owns generic execution only. Synthetic operation,
   encoder, decoder, validator, fixture, and output semantics live in the
   separate `sweden-conformance` crate.
 - `sweden-executor` alone orchestrates non-secret credential/access binding,
   explicit blocking/async/`NoCache` store contracts, bounded cache lookup,
-  post-wait access revalidation, closed entry-trust/cache-time decisions,
-  validator insertion, optional fenced revisioned fill publication, quota
-  scope, late one-use secret materialization, registered response outcomes,
-  and successful final provenance.
+  post-wait access revalidation with one execution-scoped
+  `AccessRebindLedger` and the unchanged parent cache-work ledger, closed
+  entry-trust/cache-time decisions, validator insertion, optional fenced
+  revisioned fill publication, quota scope, late one-use secret
+  materialization, registered response outcomes, and successful final
+  provenance.
 - `sweden-core` owns canonical closed request-header categories and structural
-  completion/generative attempt vocabulary only; constructing a structural
-  attempt brand grants no execution or completion authority.
+  completion/generative attempt vocabulary plus generic non-cloneable restart
+  ledger mechanics only; it does not choose access-rebind policy, and
+  constructing a structural attempt brand or ledger grants no execution or
+  completion authority.
 - `sweden-http` owns the opaque attempt-branded wire witness, each codec owns
   its own opaque attempt-branded syntax witness, `sweden-registry` owns branded
   semantic-witness construction through the bound validator, and
