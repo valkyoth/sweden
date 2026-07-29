@@ -73,10 +73,10 @@ its established scope or gates:
   attempt revalidates its registry-bound freshness mode, policy version,
   revocation, kill switch, origin, and environment immediately before
   credentials and I/O;
-- accepted: authorization, time-of-use policy validation, quota reservation,
-  credential injection, and an in-flight attempt are distinct non-cloneable
-  states; `AuthorizedExecution<R>` binds the quota requirement but never owns
-  a pre-acquired lease;
+- accepted: authorization, time-of-use policy validation, credential/provider
+  selection, quota reservation, credential injection, and an in-flight attempt
+  are distinct non-cloneable states; `AuthorizedExecution<R>` binds the quota
+  requirement but never owns a pre-acquired lease;
 - accepted: borrowed decoding uses a synchronous callback visitor whose event
   borrow cannot escape the callback; async callers retain events only through
   an explicit bounded owned `alloc` path;
@@ -94,6 +94,25 @@ its established scope or gates:
   reviewed static representation headers, protected late credential slots,
   typed cache-validator slots, explicitly dossier-permitted bounded caller
   metadata, and transport-owned framing that callers cannot set;
+- accepted: response finalization is selected by a closed registered
+  status/outcome profile; body success, `304 Not Modified`, reviewed empty
+  success, redirect, and source error paths have distinct proof requirements,
+  and only a body success or a fully matched cached finalized value can return
+  successful `Finalized<R>` provenance;
+- accepted: quota partition identity is dossier-selected, not caller-created;
+  a generated `QuotaScope` recipe binds source/global, origin/environment,
+  coordinated deployment/IP, credential-pool, operation, or an explicitly
+  reviewed combination, and credential-pool identity comes opaquely from the
+  credential provider without hashing secret bytes;
+- accepted: cache validators are derived only from the already-selected cache
+  entry and inserted late by executor-owned cache logic; they are not caller
+  input or part of the base cache key and remain bound to the exact partition,
+  policy/schema/registry versions, and reviewed `Vary` identity;
+- accepted: `BodyWireBytes` means content-coded body bytes delivered by the
+  adapter after TLS and HTTP transfer framing are removed but before any
+  content decoding/decompression; it excludes TLS records, HTTP/2 or HTTP/3
+  frames, chunk framing, headers, and other network overhead, so true
+  bandwidth enforcement remains an adapter/deployment capability;
 - accepted: event sinks return a closed continue/pause/stop/abort decision and
   are trusted caller code that may block, panic, copy data, or consume
   arbitrary CPU; Sweden cannot portably catch panics in `no_std`;
@@ -218,7 +237,8 @@ Five mechanisms remain distinct:
 - `Limits`: immutable operation maxima that callers may only tighten;
 - `Ledger`: non-`Copy`, non-`Clone` local capacity charged before work;
 - `QuotaAuthority`: caller/deployment coordination for time, concurrency, and
-  shared upstream quotas;
+  shared upstream quotas under the registry-bound `QuotaScope` recipe; callers
+  cannot mint a fresh production partition to escape prior consumption;
 - `PolicyAuthority`: optional caller/deployment source of current revocation
   and monotonic policy-version state;
 - `AuthorizedExecution<R>`: a one-use registry-created package binding the
@@ -233,6 +253,18 @@ establishes that scope. Hosted or multi-process modes requiring coordinated
 quota enforcement fail closed when the authority or trustworthy time source is
 unavailable.
 
+`QuotaScope` is source-dossier data, not a free-form key. Its closed recipes
+cover source-global, origin/environment, coordinated deployment/IP,
+credential-pool, operation, and specifically reviewed compositions. For
+credential-pool scope, the conforming provider returns an opaque
+`CredentialPartitionId` beside the credential. The identifier is stable across
+rotation and aliases that share one upstream pool; raw credential bytes are
+never hashed, serialized, logged, or accepted as partition material.
+Source-global, deployment/IP, and other cross-client recipes require a
+coordinated authority and fail closed when it is unavailable. Cache/data
+partitioning remains a separate typed decision and cannot silently subdivide a
+quota scope.
+
 ### 2.7 Closed request-header model
 
 `CanonicalPlan<Unauthenticated>` admits headers only through typed categories:
@@ -242,7 +274,8 @@ unavailable.
 - `CredentialHeaderSlot` for protected late injection after origin and policy
   revalidation;
 - `CacheValidatorSlot` for typed bounded `If-None-Match` and
-  `If-Modified-Since` values;
+  `If-Modified-Since` values selected only from an already-matched cache entry
+  and filled late by executor-controlled cache logic, never by the caller;
 - `CallerMetadataSlot` only when the exact operation dossier names the field,
   grammar, confidentiality class, and byte/count ceiling; and
 - `TransportFraming`, including `Content-Length`, owned solely by the reviewed
@@ -255,6 +288,10 @@ per-field budget overflow fail closed. Representation-affecting static and
 caller metadata participate in canonical request/cache identity or an
 explicit reviewed `Vary` dimension. Credentials, transport framing, and
 operational diagnostics never become canonical or cache-key material.
+Cache-validator values are excluded from the base cache key so revalidation
+does not create a new identity; their slot is instead bound to the selected
+entry's exact cache key/partition, validator, policy/schema/registry versions,
+and reviewed `Vary` identity.
 
 No raw header map or generic `(name, value)` escape hatch exists in an
 authorized plan. Source dossiers and generated registry entries enumerate
@@ -369,10 +406,10 @@ metadata changes. At `v1.0.0`, every crate then in the workspace converges to
 | Crate | Owns | Must not own |
 | --- | --- | --- |
 | `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan and closed header categories, borrowed-event contracts, authority-free invariant attempt generativity, structural completion traits/status, provenance vocabulary | concrete completion witnesses, policy decisions, I/O, credentials, agency models |
-| `sweden-policy` | source-independent dossier evaluation, revocation/expiry logic, cache/quota requirement contracts | source registry data, transport calls, credentials, source decoding |
-| `sweden-registry` | generated closed membership, exact profile/header compatibility, opaque `AuthorizedExecution<R>`, epoch-bound authority observation, invocation of the bound validator, private branded semantic witness | generic policy algorithms, transport calls, credentials, wire implementations |
-| `sweden-http` | blocking/async transport, response sink, redirect-as-data, safe transport codes, private branded `WireComplete` witness | authorization, retries, credential injection, agency semantics |
-| `sweden-executor` | time-of-use revalidation, generative attempt scope, quota reservation/commit/release transitions, late credentials, redirect/retry state machines, exact-branded-witness consumption, private `Finalized<R>`/complete provenance, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
+| `sweden-policy` | source-independent dossier evaluation, revocation/expiry logic, closed response-outcome and cache/quota-scope requirement contracts | source registry data, transport calls, credentials, source decoding |
+| `sweden-registry` | generated closed membership, exact profile/header/outcome/quota compatibility, opaque `AuthorizedExecution<R>`, epoch-bound authority observation, invocation of bound success/error validators, private branded semantic witness | generic policy algorithms, transport calls, credentials, wire implementations |
+| `sweden-http` | blocking/async transport, normalized response metadata and body sink, redirect-as-data, safe transport codes, private branded `WireComplete` witness | authorization, retries, credential injection, agency semantics, network-bandwidth claims |
+| `sweden-executor` | time-of-use revalidation, generative attempt scope, quota-scope resolution and reservation/commit/release transitions, late credential/cache-validator injection, status-specific response dispatch, redirect/retry state machines, exact-branded-witness consumption, private `Finalized<R>`/complete provenance, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
 | Codec crate | bounded syntax, event visitor, private branded codec-specific completion witness such as `JsonComplete` or `XmlComplete` | wire/semantic completion, I/O, policy authority |
 | `sweden-conformance` | synthetic operations, encoders, decoders, validators, output types, and fixtures | registry authority, generic execution, production source claims |
 | Agency crate | typed operation metadata, inputs, encoding, decoding, semantic validation | authority issuance, sockets, TLS, generic execution, other agencies |
@@ -463,6 +500,36 @@ Hostile packages must fail to forge a witness, substitute a codec witness,
 combine valid witnesses from two concurrent attempts of the same operation,
 or bypass the registered validator.
 
+### 3.4 Status-specific response outcomes
+
+Completion is a closed registry-selected algebra, not one universal
+wire-plus-codec-plus-semantic recipe:
+
+- `BodyResponse<R>` requires same-attempt `WireComplete`, the exact registered
+  codec witness, and registered semantic completion before new
+  `Finalized<R>`/`Complete` provenance exists.
+- `NotModified<R>` requires a complete reviewed `304` response and an
+  already-selected previously `Finalized<R>` cache entry. The executor
+  revalidates current cache permission and exactly matches cache key,
+  non-secret partition, validator, schema, policy and registry versions, and
+  every reviewed `Vary` dimension. It returns the prior finalized value with a
+  revalidation record; it never manufactures new semantic completion or runs
+  the normal body decoder.
+- `EmptyResponse<R>` is admitted only when the registry profile names that
+  status and a `NoBody` semantic output. It requires wire completion with an
+  exactly empty body and cannot substitute for a body-bearing success.
+- `RedirectResponse` contains only bounded normalized redirect metadata for
+  the redirect state machine. It never creates success provenance, cache
+  content, or a source result.
+- `SourceErrorResponse<E>` uses the exact registered bounded source-error
+  status/media/decoder/profile and produces only a safe typed source error.
+  Even a fully decoded error cannot create `Finalized<R>` success provenance.
+
+All variants carry the same invariant attempt brand and exact registered
+status profile. Unknown, conflicting, or wrong-profile statuses fail closed.
+The executor alone dispatches the algebra; neither a transport, cache, codec,
+nor caller may reinterpret one outcome as another.
+
 ## 4. Request Lifecycle
 
 ```text
@@ -487,6 +554,11 @@ binding every later state and completion witness
         ↓
 PolicyRevalidated<R>
         ↓
+late credential/provider selection into a protected one-use handle
+and opaque CredentialPartitionId when the quota scope requires it
+        ↓
+CredentialSelected<R>
+        ↓
 QuotaLeaseAcquired<R>
         ↓
 late credential injection into a reviewed execution sink
@@ -501,9 +573,14 @@ trusted caller-owned transport boundary
         ↓
 bounded body sink
         ↓
-bound source decoder and semantic validation
+closed registered response-outcome dispatch
+        ├─ body → exact codec + semantic validation
+        ├─ 304 → exact finalized cache-entry revalidation
+        ├─ reviewed empty → exact NoBody profile
+        ├─ redirect → bounded redirect state, never success
+        └─ source error → registered error profile, never success
         ↓
-provenance-wrapped result
+typed outcome; success provenance only for admitted success branches
 ```
 
 Every live attempt traverses these private, non-`Copy`, non-`Clone` states.
@@ -512,8 +589,8 @@ partial completion witness can be moved to another attempt, even when two
 concurrent executions have identical Rust types and operation metadata.
 `PolicyRevalidated<R>` checks the bound freshness requirement, expiry,
 registry/policy version, revocation, kill switch, origin, and environment
-against trustworthy time and any required authority. The check occurs before
-quota acquisition, immediately before credential acquisition, and again
+against trustworthy time and any required authority. The check occurs
+immediately before credential selection, before quota acquisition, and again
 before I/O; retry delays, redirects, and page transitions return to policy
 revalidation rather than reusing an earlier decision. Callers may tighten a
 freshness requirement but cannot downgrade it.
@@ -539,10 +616,20 @@ SDK documents that residual race and does not call it atomic revocation;
 deployments requiring that property need a controlled broker or a future
 authority-issued one-attempt grant coupled to transport admission.
 
+`CredentialSelected<R>` contains either the registered no-credential marker or
+a private one-use provider handle coupling the credential to its opaque stable
+`CredentialPartitionId`; selection happens after policy revalidation, but
+wire injection remains later. A conforming provider preserves one partition
+across rotations/aliases sharing the same upstream quota pool and cannot cause
+secret bytes to become key material.
+
 `QuotaLeaseAcquired<R>` is an uncommitted attempt reservation plus concurrency
-lease acquired as late as possible. Credential-provider failure or a final
-pre-I/O policy denial cancels the unused reservation and releases concurrency
-at most once; it does not spend a network-attempt budget. Transition to
+lease acquired as late as possible. Its authority key is resolved from the
+registry-bound `QuotaScope` and `CredentialSelected<R>`, never from a
+caller-selected partition. Credential-provider failure happens before quota
+reservation. A later policy denial or credential-injection failure cancels the
+unused reservation and releases concurrency at most once; neither spends a
+network-attempt budget. Transition to
 `AttemptCommitted<R>` records an atomic quota commit inside `QuotaAuthority`
 immediately before transport invocation. That commit cannot be atomic with an
 external network call: a crash after commit but before invoking the transport
@@ -569,10 +656,11 @@ pagination abstraction erases upstream semantics.
 The API must make it impossible to select an arbitrary production origin.
 Credentials are inserted only after the origin is validated and are excluded
 from debug output, cache keys, canonical hashes, errors, and fixtures.
-Authorized executions, revalidated states, quota reservations/leases,
-credential-injected states, and in-flight attempts are non-`Copy`,
-non-`Clone`, operation-, environment-, and origin-bound. Retries, redirects,
-and subsequent pages require fresh checks, charges, and authorization.
+Authorized executions, revalidated states, credential selections, quota
+reservations/leases, credential-injected states, and in-flight attempts are
+non-`Copy`, non-`Clone`, operation-, environment-, and origin-bound. Retries,
+redirects, and subsequent pages require fresh checks, charges, and
+authorization.
 
 A caller-owned transport can still copy credentials, ignore deadlines, choose
 another destination, or log data. Sweden does not claim to sandbox arbitrary
@@ -595,6 +683,9 @@ source dossier:
    retry, and pagination rules. Inventory every request header by the closed
    category, duplicate/budget rule, confidentiality, canonical/cache identity
    participation, reviewed `Vary` dimension, or transport-owned exclusion.
+   Enumerate each accepted response status/outcome and one generated
+   `QuotaScope`, including provider pool identity/rotation semantics and
+   required coordination.
 4. Pin official schema/specification inputs with retrieval metadata and hashes.
 5. Define explicit request, response, collection, retry, redirect, allocation,
    and time budgets.
@@ -671,14 +762,17 @@ data, or consume arbitrary CPU. Sweden cannot catch unwinds portably in
 attempt commit spends the attempt; concurrency cleanup depends on an actual
 unwind guard or lease expiry.
 
-Streaming events remain provisional until three opaque producer-owned
-witnesses exist: HTTP wire completion, the exact registered codec completion,
-and registry-owned source-semantic completion. Each carries the same
-executor-generated invariant attempt brand. Only `sweden-executor` can consume
-their same-attempt, registry-bound combination to construct `Finalized<R>` and
-`Complete` provenance. Provisional data cannot enter a cache or advance a
-cursor/checkpoint. Callers that act on provisional events before composite
-finalization explicitly own the downstream rollback/compensation risk.
+For a registered body-bearing success, streaming events remain provisional
+until three opaque producer-owned witnesses exist: HTTP wire completion, the
+exact registered codec completion, and registry-owned source-semantic
+completion. Each carries the same executor-generated invariant attempt brand.
+Only `sweden-executor` can consume their same-attempt, registry-bound
+combination to construct new `Finalized<R>` and `Complete` provenance.
+`304`, no-body, redirect, and source-error statuses use their distinct closed
+outcome rules and cannot manufacture this body-success chain. Provisional data
+cannot enter a cache or advance a cursor/checkpoint. Callers that act on
+provisional events before composite finalization explicitly own the downstream
+rollback/compensation risk.
 
 JSON work is split into:
 
@@ -742,7 +836,8 @@ The implementation sequence is:
 6. Filter AST with field/operator compatibility.
 7. Projection, ordering, paging, and cost budgets.
 8. Canonical bounded XML encoder.
-9. Strict response envelope and upstream error decoder.
+9. Strict status-specific response outcomes: body success, reviewed no-body,
+   bounded redirect metadata, cache revalidation, and upstream error decoder.
 10. Offline deterministic model generation.
 11. Small object-family slices with fixture and offline conformance evidence;
     live evidence begins at `v0.37.0`.
@@ -775,6 +870,15 @@ The transport boundary requires:
 - safe error categories without raw headers or URLs;
 - no automatic proxy-environment use unless the caller explicitly enables it.
 
+`BodyWireBytes` is deliberately a Sweden/adapter handoff metric, not an
+on-the-network metric. It counts content-coded response body octets delivered
+to the sink after TLS and HTTP transfer framing are removed and before any
+content decoding or decompression. TLS records, HTTP/2 and HTTP/3 frames,
+chunk framing, request/response headers, retransmission, and other protocol
+overhead are excluded. Header/trailer bytes have their own bounded metadata
+budgets. Enforcing actual link/network bandwidth requires a conforming
+transport or deployment control and is never inferred from `BodyWireBytes`.
+
 Static dispatch is the default transport path. Heterogeneous boxed transports
 are a separate `alloc`-gated convenience and must document object-safety and
 MSRV behavior. Adapter errors are collapsed immediately into a closed safe code
@@ -789,8 +893,12 @@ an explicit dependency-policy change.
 Reviewed adapters must return redirects as data, disable automatic proxy
 discovery and redirects by default, avoid unmetered decompression and
 buffering, and translate adapter errors immediately into closed safe
-categories. These are conformance properties, not guarantees about arbitrary
-implementations.
+categories. They return closed normalized response metadata and fail closed on
+conflicting `Content-Length` or transfer-framing claims, duplicate singleton
+`Content-Type`, `Content-Encoding`, `Location`, or validator fields,
+unreviewed informational responses, and forbidden or ambiguous trailers.
+These are conformance properties, not guarantees about arbitrary
+implementations, which may fabricate metadata or misreport byte counts.
 
 Canonicalization and redirect fixtures cover encoded separators and dot
 segments, duplicate query keys, backslashes, Unicode-equivalent spellings,
@@ -811,10 +919,10 @@ The same trust distinction applies to all external authorities:
 
 | External boundary | Sweden-owned behavior | Conforming implementation | Arbitrary implementation |
 | --- | --- | --- | --- |
-| Transport | closed plans and safe wire handoff | conformance-tested origin/TLS/proxy/redirect behavior | may send, retain, or fabricate anything |
+| Transport | closed plans, normalized metadata contract, and body-wire ledger after transfer framing | conformance-tested origin/TLS/proxy/redirect, singleton/framing, and byte-accounting behavior | may send, retain, fabricate metadata, or misreport body/network bytes |
 | Clock | explicit monotonic/UTC requirements, ephemeral epoch, and fail-closed unknown/reset/wrap | passes rollback/jump/restart/epoch tests | may lie, stall, reset, or reuse an epoch |
-| Quota authority | permit required where policy demands coordination | atomic reviewed admission semantics | may over-admit |
-| Credential provider | narrow source/environment/scope request | returns only correctly scoped credentials | may return, retain, or log secrets |
+| Quota authority | permit required for the registry-bound `QuotaScope` | atomic reviewed admission under the exact generated partition recipe | may over-admit or treat forged partitions as fresh |
+| Credential provider | narrow source/environment/scope request | returns correctly scoped credentials plus stable opaque pool identity across shared-pool rotation/aliases | may return, retain, or log secrets, lie about pool identity, or cause partition explosion |
 | Cache/state store | typed directives, partitions, and bounded values | honors denial, purge, version, and collision rules | may retain forbidden/stale data |
 | Policy/kill-switch authority | version/expiry/revocation and observation epoch are validated | supplies authenticated current state bound to the requested epoch | may suppress revocation, roll back, or replay an old observation |
 | Allocator | logical/requested/container budgets checked where observable | documents rounding, metadata, and failure behavior | may consume more physical memory than requested |
@@ -900,6 +1008,10 @@ Security deliverables grow with implementation:
 - parser budgets before parser exposure;
 - producer-owned completion witnesses and hostile-forgery tests before final
   provenance;
+- status-specific body/`304`/empty/redirect/source-error outcome substitution
+  tests before any response can finalize;
+- generated quota-scope and opaque credential-partition forgery/rotation/
+  aliasing/multi-client tests before live execution;
 - event-sink control, safe error, pause/abort, and panic-boundary tests before
   callback exposure;
 - SSRF and redirect tests before transport execution;
@@ -949,8 +1061,15 @@ The granular version sequence and exact stop language live in
 - there are no unbudgeted parser, body, page, retry, or time paths;
 - JSON, XML, and CSV admitted subsets have final corpus and fuzz evidence;
 - every budget is a consumable pre-charged ledger rather than passive metadata;
+- `BodyWireBytes` is documented and tested as adapter-delivered content-coded
+  body bytes rather than total network bandwidth, and conforming metadata
+  normalization rejects conflicting framing/singleton/trailer state;
 - coordinated deployments require a reviewed `QuotaAuthority`, while local
   advisory limiting is never described as an agency-wide quota guarantee;
+- every production quota permit uses the dossier-generated `QuotaScope`;
+  callers cannot mint partitions, credential-pool IDs survive shared-pool
+  rotation/aliasing without secret-derived keys, and cross-client scopes
+  require coordination;
 - there is no arbitrary-origin path in Sweden-owned execution;
 - no credential-leaking path exists in Sweden-owned planning, execution,
   diagnostics, caching, fixtures, or replay code; arbitrary transports remain
@@ -974,6 +1093,10 @@ The granular version sequence and exact stop language live in
   events cannot create complete provenance, cache entries, or checkpoint
   advances before private HTTP, exact-codec, registry-semantic, and
   executor-final witness consumption with one invariant attempt brand;
+- the closed registered response algebra prevents `304`, reviewed empty,
+  redirect, and source-error outcomes from masquerading as body success;
+  cache revalidation matches a prior `Finalized<R>` entry and current cache
+  permission without creating semantic completion;
 - valid completion witnesses from concurrent same-operation attempts cannot
   be mixed, and paused decoding owns and charges input/carry exactly once;
 - official fixture retention follows its operation-level classification,

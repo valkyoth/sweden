@@ -33,6 +33,10 @@
   `Complete` provenance;
 - invariant per-attempt branding across every completion witness, with
   concurrent same-operation substitution tests;
+- closed status-specific completion: body success requires wire/codec/semantic
+  proof, `304` requires an exact prior finalized cache entry, reviewed empty
+  requires `NoBody`, and redirect/source-error paths cannot create success
+  provenance;
 - event-boundary-only pause, caller ownership of unconsumed input, bounded
   already-charged decoder carry, next-chunk denial while paused, and exact-once
   resume accounting;
@@ -48,6 +52,9 @@
   CRLF/control rejection, hop-by-hop denial, and byte/count budgets;
 - representation-affecting headers included in canonical/cache identity or
   reviewed `Vary`, with credentials/framing/diagnostics excluded;
+- cache validators derived only from the selected cache entry, inserted late
+  by executor logic, excluded from the base key, and bound to exact cache
+  partition, validator, policy/schema/registry, and `Vary` identity;
 - HTTPS-only production policy;
 - reviewed redirect rules;
 - late credential injection;
@@ -64,7 +71,11 @@
   authority observations; restart, reset/wrap, or mismatch re-observes or
   denies;
 - distinct authorization, policy-revalidated, quota-reserved,
-  credential-injected, attempt-committed, and attempt-in-flight states;
+  credential-selected, quota-reserved, credential-injected,
+  attempt-committed, and attempt-in-flight states;
+- dossier-generated `QuotaScope` with no caller-created production partition;
+  opaque provider pool IDs remain stable across shared-pool rotation/aliases,
+  never derive from secrets, and cross-client scopes require coordination;
 - authority-local quota commit before the external transport call, with the
   intervening crash gap conservatively spending the attempt;
 - explicit deadline mode, retries, and rate budgets without claiming a clock
@@ -72,6 +83,12 @@
 - complete reviewed interval/window/concurrency enforcement and fenced lease
   recovery; official network execution remains prohibited through `v0.36.0`;
 - response byte accounting before decode;
+- `BodyWireBytes` defined as content-coded bytes delivered after TLS/transfer
+  framing and before content decoding, with separate metadata budgets and no
+  total-network-bandwidth claim;
+- conforming-adapter rejection of conflicting length/framing, duplicate
+  singleton response metadata, unreviewed informational responses, and
+  ambiguous trailers;
 - SSRF and credential-destination tests;
 - adversarial canonicalization tests for encoded separators/dot segments,
   duplicate query keys, backslashes, Unicode-equivalent forms, fragments,

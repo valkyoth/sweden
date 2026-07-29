@@ -298,6 +298,10 @@ Deliverables:
 - Fail-closed `Unknown` and `ReviewRequired` states.
 - Operation-specific access, authentication, hosted-use, data-class, cache,
   attribution, transformation, redistribution, retry, and pagination rules.
+- Closed dossier-selected `QuotaScope` recipes for source-global,
+  origin/environment, coordinated deployment/IP, credential pool, operation,
+  and explicitly reviewed combinations. Production partition identity is not
+  a caller input, and cache/data partitions are a separate policy dimension.
 - Typed cache directives such as `Forbidden`, `Private`, `Revalidate`, and
   bounded freshness; callers may narrow but never broaden them.
 - Contradiction checks and decision tests.
@@ -328,6 +332,9 @@ Deliverables:
 - Canonical formatter and round-trip fixtures.
 - Official evidence references, retrieval time, content digest, reviewer,
   expiry, schema inputs, operation inventory, and explicit exclusions.
+- Required response-status/outcome profiles and quota-scope recipes, including
+  whether credential-pool identity must survive rotation/aliasing and whether
+  coordinated authority is mandatory.
 - Standard cryptographic digests computed by pinned offline tooling and
   represented as opaque reviewed values in portable code.
 - Reviewer/trust-root binding, monotonic policy version, downgrade/rollback
@@ -366,6 +373,14 @@ Deliverables:
   semantic validator, output/provenance type, limits, finalization behavior,
   origin, environment, policy/dossier/schema versions, reviewer trust root,
   expiry, quota requirement, and kill-switch state to later execution.
+- The response profile is a closed status-specific algebra: body success,
+  `NotModified`, reviewed `NoBody`, redirect, and registered source error.
+  Wrong or unknown status/profile combinations cannot select a success
+  decoder or finalization path.
+- The quota requirement binds the exact generated `QuotaScope` recipe and
+  whether a coordinated authority or provider-owned opaque
+  `CredentialPartitionId` is required; callers cannot supply a replacement
+  production partition.
 - Registry entries bind the exact generated header schema and canonical/cache
   participation rules from `v0.5.0`; authorization rejects missing, extra,
   duplicate, or differently classified header slots.
@@ -388,6 +403,10 @@ Deliverables:
 - The quota contract reserves distinct two-phase acquire, commit, unused
   cancel/release, fencing, and expiry outcomes so v0.21 mock states and v0.37
   coordinated algorithms do not require a second authority API.
+- Credential providers expose a private one-use selection result that couples
+  credential material to its opaque pool identity without deriving that
+  identity from the raw secret; executor integration arrives at `v0.21.0` and
+  provider hardening at `v0.23.0`/`v0.46.0`.
 - Fields and constructors private to `sweden-registry`; downstream code may
   carry an authorized execution but cannot construct, clone, alter, inspect,
   or pair it with a caller-selected decoder, validator, media profile, or
@@ -410,7 +429,8 @@ Verification:
   wrong-plan/environment/origin, stale digest, rollback, expiry, kill-switch,
   authorization-reuse, freshness-downgrade, unavailable-time, stale-authority,
   wrong-registry authority, counter reset/wrap, epoch mismatch, restart with a
-  cached observation, and serialization-attempt compile-fail tests.
+  cached observation, wrong status/outcome profile, forged/unknown quota scope
+  or partition, and serialization-attempt compile-fail tests.
 - Hostile downstream test package that invents IDs/origins/operations,
   implements the public contract, constructs dossier-shaped data, and attempts
   to forge an authorized execution, register an unreviewed plan, or substitute
@@ -434,15 +454,25 @@ Deliverables:
 - Create and publish the focused `sweden-http` crate.
 - `#![no_std]` contract crate with no heap, socket, timer, executor, runtime,
   filesystem, environment, DNS, or TLS dependency.
-- Credential-free request input, bounded response sink, safe metadata, and
-  transport error contract.
+- Credential-free request input, bounded response sink, closed normalized
+  response metadata, and safe transport error contract.
+- Define `BodyWireBytes` as content-coded body bytes delivered by the adapter
+  after TLS and HTTP transfer framing are removed and before content
+  decoding/decompression. It excludes TLS records, HTTP/2/HTTP/3 frames,
+  chunk framing, headers, retransmission, and other network overhead; total
+  bandwidth enforcement is explicitly an adapter/deployment capability.
+- Metadata contract for status, informational responses, `Content-Length`,
+  transfer-framing state, singleton `Content-Type`/`Content-Encoding`/
+  `Location`/validators, and bounded trailers. Conflicts or ambiguity are
+  fail-closed for conforming implementations.
 - Redirect-as-data, cancellation-state, and backpressure contracts.
 - No concrete HTTP or TLS implementation.
 
 Verification:
 
-- Inherited gate plus timeout, truncation, redirect, over-budget, and partial
-  response tests.
+- Inherited gate plus timeout, truncation, redirect, over-budget, partial
+  response, conflicting framing, duplicate singleton metadata, informational,
+  and trailer tests.
 - Compile checks proving the contract works without `std` or allocation.
 - Confirm `sweden-core` does not depend outward and the facade does not enable
   transport behavior by default.
@@ -495,6 +525,9 @@ Deliverables:
 
 - Independent wire/decoded consumable ledgers, chunk sink, completion state,
   and truncation detection.
+- `BodyWireBytes` ledger begins at the normalized adapter/body-sink boundary;
+  header/trailer metadata has separate budgets and no total-network-byte claim
+  is inferred.
 - Add the shared `no_std` borrowed-stream vocabulary to `sweden-core`, using
   `EventFamily::Event<'event>` and
   `EventSink<F>::on_event<'event>(F::Event<'event>) -> SinkControl`.
@@ -530,6 +563,10 @@ Deliverables:
   wire and decoded ledgers and charges output before exposure.
 - Bounded status, media type, charset, header/trailer, and informational
   response handling plus content-length preflight.
+- Closed structural response outcomes for body-bearing success, `304`, reviewed
+  no-body success, redirect, and source error. `WireComplete` binds the exact
+  status/metadata profile and attempt but cannot alone turn any branch into
+  success provenance.
 - Backpressure and abort results.
 - Fault-injection test support.
 - Pre-charge before chunk acceptance or decoded-fragment exposure.
@@ -538,7 +575,9 @@ Verification:
 
 - Inherited gate plus exact-limit, one-byte-over, partial, repeated-completion,
   counter-overflow, valid-prefix/malformed-trailer, duplicate-late-field, and
-  valid-prefix/truncation tests.
+  valid-prefix/truncation tests, plus wrong-status outcome substitution,
+  forbidden-body-on-`304`/no-body, conflicting `Content-Length`/framing,
+  duplicate singleton response metadata, informational, and trailer cases.
 - Compile tests proving a borrowed event cannot escape `on_event`, plus
   every sink decision, pause/resume, stop/abort provisional behavior, safe
   error collapse, paused-next-chunk denial, caller-input versus decoder-carry
@@ -850,12 +889,12 @@ Deliverables:
   profiles one-way without a dependency cycle.
 - Private non-cloneable state sequence:
   `AuthorizedExecution<R> -> PolicyRevalidated<R> ->
-  QuotaLeaseAcquired<R> -> CredentialInjected<R> -> AttemptCommitted<R> ->
-  AttemptInFlight<R>`.
+  CredentialSelected<R> -> QuotaLeaseAcquired<R> ->
+  CredentialInjected<R> -> AttemptCommitted<R> -> AttemptInFlight<R>`.
   Authorization binds a quota requirement, not a pre-acquired lease.
 - Time-of-use revalidation of freshness requirement, expiry,
   registry/policy version, revocation, kill switch, origin, and environment
-  before quota acquisition, credential acquisition, and I/O. Retry delays,
+  before credential selection, quota acquisition, and I/O. Retry delays,
   redirects, and page transitions must re-enter revalidation.
 - `AuthorityObservation<'epoch>` cannot cross executor/clock sessions; restart,
   monotonic reset/wrap, or epoch mismatch forces re-observation before
@@ -868,9 +907,15 @@ Deliverables:
   the last authority observation and before an external transport call.
   Atomic revocation is not claimed; it would require a separately reviewed
   authority-issued one-attempt grant or controlled policy/transport broker.
+- `CredentialSelected<R>` is either a registered no-credential marker or a
+  private one-use provider result coupling the credential to an opaque
+  `CredentialPartitionId`. Selection occurs after policy revalidation, before
+  quota reservation when the generated `QuotaScope` requires that identity;
+  secret-bearing wire injection remains later.
 - Late quota reservation and concurrency acquisition. Credential-provider
-  failure or final pre-I/O denial cancels the uncommitted attempt reservation,
-  releases concurrency at most once, and does not spend a network attempt.
+  failure occurs before reservation. Final pre-I/O denial or injection failure
+  cancels the uncommitted attempt reservation, releases concurrency at most
+  once, and does not spend a network attempt.
   Quota commit is atomic only within `QuotaAuthority`, not with external
   network transmission. A crash after `AttemptCommitted<R>` but before
   transport invocation conservatively spends the attempt; every later failure
@@ -888,6 +933,12 @@ Deliverables:
   and validator identity. `sweden-executor` alone consumes matching branded
   `WireComplete`, `JsonComplete`/`XmlComplete`, and semantic witnesses inside
   that scope to privately construct `Finalized<R>` and `Complete` provenance.
+- Executor dispatches the registered closed response algebra:
+  body success requires wire/codec/semantic witnesses; `NotModified<R>`
+  requires an exactly matching previously finalized cache entry and current
+  cache permission without new semantic completion; reviewed no-body requires
+  exact empty wire plus `NoBody`; redirects and registered source errors never
+  produce success provenance.
 - Sink stop/abort/panic never produces any completion witness. After quota
   commit, cancellation or panic spends the attempt; concurrency uses an
   unwind/drop guard only where unwinding actually occurs and otherwise
@@ -908,13 +959,16 @@ Verification:
   attempts, decoder/validator/output substitution, semantic-validator bypass,
   forged-finalization attempts, retained-authorization expiry/revocation,
   freshness downgrade, stale authority, cached-observation restart/epoch
-  mismatch, credential-provider failure,
+  mismatch, credential-provider failure, forged/rotated/aliased credential
+  partition identity,
   reservation cancellation, double release, pre-handoff versus ambiguous
   post-handoff failure, crash between quota commit and transport invocation,
   sink continue/pause/stop/abort/panic, cross-execution/cross-codec witness
   substitution including two concurrent attempts of the same operation and
   type, hostile witness construction, final-check/revocation race
-  documentation, deadline-mode propagation, and preflight corpus replay.
+  documentation, every status-outcome substitution including `304` cache-key/
+  partition/validator/version/`Vary` mismatch, deadline-mode propagation, and
+  preflight corpus replay.
 
 Exit criteria:
 
@@ -946,6 +1000,9 @@ Deliverables:
   credential, cache-validator, caller-metadata, and transport-framing field,
   including duplicate rules, budgets, canonical/cache identity participation,
   reviewed `Vary` dimensions, and explicit exclusions.
+- Per-operation accepted status/outcome table and quota-scope recipe, including
+  no-body/error/redirect behavior, credential-pool rotation/alias semantics,
+  and whether source/deployment/IP scope requires coordinated authority.
 
 Verification:
 
@@ -970,6 +1027,11 @@ Deliverables:
 - Trafikverket's generated static and credential header slots, with protected
   override denial; no raw caller headers, hop-by-hop fields, or caller-owned
   framing.
+- Provider selection returns a private one-use credential handle plus an
+  opaque `CredentialPartitionId` when the dossier quota scope is
+  credential-pool based. The ID is stable across credentials/aliases sharing
+  one upstream pool, is not caller-constructible, and is never derived from
+  secret bytes.
 - Secret/provider types without revealing `Debug`, `Display`, `Hash`,
   serialization, `Copy`, `Clone`, or public byte getters.
 - Redaction, full-URL exclusion, and wrong-origin negative tests.
@@ -979,7 +1041,8 @@ Deliverables:
 Verification:
 
 - Inherited gate plus marker-secret snapshots across errors, debug, requests,
-  hashes, fixtures, and mock recordings.
+  hashes, fixtures, and mock recordings, with credential rotation, aliases,
+  forged partition values, and secret-derived-partition denial.
 
 Exit criteria:
 
@@ -1000,6 +1063,8 @@ Deliverables:
   operation encoder, response media/status profile, decoder, semantic
   validator, output/provenance type, limits, environment, origin,
   policy/dossier/schema evidence, and review expiry.
+- Bind the operation's exact closed success/empty/redirect/source-error outcome
+  profile and generated quota scope; no raw status or partition override.
 - Mock execution and an offline conformance command using reviewed
   redistributable fixtures. The command refuses official network access until
   the `v0.37.0` live gate exists.
@@ -1114,8 +1179,11 @@ Goal: decode success and upstream failures without semantic ambiguity.
 
 Deliverables:
 
-- Strict outer envelope, source error, version, request ID, and partial-body
-  states.
+- Strict outer envelope, body-success, reviewed empty response, source error,
+  version, request ID, and partial-body states.
+- Exact registry-selected source-error status/media/decoder profile producing
+  safe typed error output but never success provenance. Trafikverket redirects
+  remain bounded redirect outcomes owned by the executor state machine.
 - Bounded unknown-field policy.
 - Safe schema mismatch paths.
 - Raw/decoded provenance attachment.
@@ -1124,7 +1192,9 @@ Verification:
 
 - Inherited gate plus truncation, mixed success/error, duplicate singleton,
   unknown field, oversized envelope, valid-record-prefix followed by envelope
-  error, and valid-record-prefix followed by truncation fixtures.
+  error, valid-record-prefix followed by truncation, wrong-status/profile,
+  source-error-as-success, unexpected/invalid empty-body, and redirect-as-body
+  fixtures.
 
 Exit criteria:
 
@@ -1311,8 +1381,14 @@ Deliverables:
 - Retry authorization bound to method semantics, operation policy,
   `Replayable`/`OneShot` body state, and delivery ambiguity.
 - Non-cloneable rate/retry permits charged before each attempt and keyed by
-  source, operation, environment, origin, credential/data partition, and
-  reviewed policy revision.
+  the registry-generated `QuotaScope` recipe and reviewed policy revision,
+  never a free caller partition. Cache/data partition identity remains
+  separate from quota identity.
+- Implement source-global, origin/environment, coordinated deployment/IP,
+  credential-pool, operation, and explicitly reviewed composite recipes.
+  Source-global, deployment/IP, and every cross-client recipe require a
+  coordinated authority. Credential-pool recipes consume the provider-owned
+  opaque ID and keep one quota history across shared-pool rotation/aliases.
 - Stabilize the minimal `v0.9.0` `QuotaAuthority` contract and implement
   operation-selected interval, window, concurrency, and coordinated
   shared-quota algorithms.
@@ -1320,10 +1396,11 @@ Deliverables:
   concurrency acquisition, authority-local commit immediately before
   transport invocation,
   at-most-once unused cancellation/release, expiry, and crash/restart
-  recovery. Credential-provider or pre-I/O policy failure cancels an
-  uncommitted reservation without spending an attempt; ambiguous delivery
-  after commit spends it. Concurrency recovers only through an accepted fenced
-  release or lease expiry.
+  recovery. Credential selection failure occurs before reservation; later
+  pre-I/O policy or credential-injection failure cancels an uncommitted
+  reservation without spending an attempt. Ambiguous delivery after commit
+  spends it. Concurrency recovers only through an accepted fenced release or
+  lease expiry.
 - No cross-system atomicity claim: a crash after the authority commit but
   before the external transport call spends the attempt even if no request was
   sent.
@@ -1347,6 +1424,9 @@ Deliverables:
 - Explicit rollback, forward-jump, unavailable-time, and restart behavior,
   direct-mode advisory-per-client semantics, and fail-closed coordinated
   behavior when required time or quota authority is unavailable.
+- Explicit partition-cardinality bounds and fail-closed unknown/forged scope
+  behavior; constructing new clients or rotating credentials cannot create
+  fresh upstream capacity.
 - Retry and timeout behavior defined for each `DeadlineMode`; `Cooperative`
   execution never upgrades a clock check into a hard preemption claim.
 - Fail-closed limiter failure policy.
@@ -1364,14 +1444,16 @@ Verification:
   window boundaries, DST authority transitions, leap-second input, rollback,
   forward jump, 429 non-refund/non-broadening, retained authorization
   expiry/revocation, retry storm, each deadline mode, and deadline exhaustion
-  tests.
+  tests, plus forged partition, partition explosion, credential rotation/
+  aliasing, multiple-client, cross-process, and unavailable required
+  coordination cases.
 
 Exit criteria:
 
 - Retry behavior cannot exceed operation or source budgets, concurrency
   capacity recovers without double release, and no official network execution
-  bypasses the complete reviewed live gate or a fresh time-of-use policy
-  decision.
+  bypasses the complete reviewed live gate, generated quota scope, or a fresh
+  time-of-use policy decision.
 - `v0.37.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.38.0 - Cache And Freshness Contracts
@@ -1385,15 +1467,29 @@ Deliverables:
 - Typed `ETag` and `Last-Modified` validators with size/character ceilings,
   reviewed `Vary` dimensions, and strict `304` metadata merging.
 - Cache validators enter requests only through the closed
-  `CacheValidatorSlot`; representation-affecting request headers are exact
-  canonical-key or reviewed `Vary` dimensions, while credentials, framing,
-  and diagnostics are excluded.
-- Policy/schema version changes invalidate validators; secrets and arbitrary
-  headers cannot become validator or cache-key dimensions.
+  `CacheValidatorSlot`, are derived only from the already-selected cache entry,
+  and are inserted late by executor-controlled cache logic. Callers cannot
+  supply validators.
+- Validator values are excluded from the base cache key so revalidation cannot
+  create a new cache identity. Each slot is instead bound to the exact selected
+  cache key/non-secret partition, validator, policy/schema/registry versions,
+  and reviewed `Vary` identity.
+- `NotModified<R>` requires complete reviewed `304` wire metadata plus the
+  matching previously `Finalized<R>` entry and current cache permission.
+  It preserves prior semantic provenance with a revalidation record and never
+  runs the success decoder or creates new semantic completion.
+- Representation-affecting request headers are exact canonical-key or reviewed
+  `Vary` dimensions, while credentials, framing, diagnostics, and validator
+  values are excluded from the base key.
+- Policy/schema/registry version changes invalidate validators; secrets and
+  arbitrary headers cannot become validator or cache-key dimensions.
 - Caller-supplied collision-resistant key function where hashing is required,
   with canonical identity comparison before accepting a collision-sensitive
   hit.
-- Explicit non-secret data/credential partition input reserved from day one.
+- Explicit non-secret cache/data partition input reserved from day one and
+  separate from `QuotaScope`. A cache may bind to an opaque credential-pool
+  partition where policy requires it, but cannot create or subdivide quota
+  capacity.
 - Provenance preservation across hits.
 - Executor-owned `Finalized<R>` required before cache insertion or validator
   update.
@@ -1403,13 +1499,16 @@ Verification:
 
 - Inherited gate plus credential exclusion, collision, stale, policy-change,
   raw/derived, ETag/Last-Modified bounds, `304` merge, unreviewed `Vary`,
-  validator invalidation, protected/header-class substitution, and purge
-  tests.
+  validator invalidation, caller-validator injection, validator-in-base-key,
+  wrong cache key/partition/schema/policy/registry/`Vary`, missing prior
+  finalization, revoked cache permission, protected/header-class substitution,
+  and purge tests.
 
 Exit criteria:
 
 - Policy denial always overrides caller cache preference and provisional data
-  can never become a cache entry.
+  can never become a cache entry. A `304` can revalidate only the exact prior
+  finalized entry and cannot manufacture semantic completion.
 - `v0.38.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.39.0 - Public API Ergonomics Review
@@ -1579,9 +1678,9 @@ Deliverables:
 - Dependency-DAG and ownership audit for core, policy, registry, HTTP,
   executor, codecs, conformance, Trafikverket, and facade.
 - Blocking/async parity for authorization, time-of-use revalidation, late
-  quota reservation/commit, credential failure, in-flight ambiguity, bound
-  sink/decoder driving, producer-owned witness creation, and executor-only
-  finalization.
+  credential/provider selection, quota reservation/commit, injection failure,
+  in-flight ambiguity, bound sink/decoder driving, producer-owned witness
+  creation, and executor-only finalization.
 - Ownership audit proving core exposes structural completion vocabulary only,
   HTTP owns `WireComplete`, each codec owns its exact completion witness,
   registry owns semantic validation/witness creation, and executor owns
@@ -1594,6 +1693,12 @@ Deliverables:
 - Closed-header audit from operation input through generated registry entry,
   credential/cache slots, and transport handoff; no raw map, caller framing,
   protected override, unreviewed `Vary`, or canonical-identity bypass.
+- Status-outcome audit proving only a registered body success can use the
+  wire/codec/semantic chain, `304` requires an exact prior finalized cache
+  entry, reviewed empty uses only `NoBody`, and redirect/source-error branches
+  never create success provenance.
+- Quota-scope audit proving callers and convenience clients cannot replace,
+  subdivide, or multiply the dossier-generated production partition.
 - Compile-fail boundaries proving the facade contains wiring only, agency
   crates do not depend on HTTP/executor, and callers cannot construct
   authorized states.
@@ -1605,8 +1710,9 @@ Verification:
   version-skew, freshness downgrade, decoder/validator/output substitution,
   forged/cross-codec/cross-execution completion witnesses, skipped/reordered
   state, concurrent same-operation witness mixing, header-category
-  substitution, double-execution, cancellation, and blocking/async
-  equivalence tests.
+  substitution, every status-outcome substitution, forged/changed quota
+  partition, double-execution, cancellation, and blocking/async equivalence
+  tests.
 
 Exit criteria:
 
@@ -1622,20 +1728,27 @@ Deliverables:
 
 - Source/environment/operation/scope-bound provider and private one-use wire
   injection review.
+- Provider-owned opaque `CredentialPartitionId` review: coupled to the
+  selected credential, stable across rotation/aliases sharing one upstream
+  quota pool, unconstructible by callers, cardinality-bounded, and never
+  derived from or revealing secret bytes.
 - Canonical pre-authentication cache/fingerprint identity and ephemeral
   secret-bearing wire representation.
 - Closed diagnostics, fixture/replay rejection, memory-lifetime guidance, and
   explicit residual exposure statement for arbitrary transports, panic/crash
   infrastructure, allocators, and the host process.
 - Credential-provider denial/failure occurs before attempt commit; the unused
-  reservation and concurrency lease follow the fenced at-most-once release
-  path without treating a provider lookup as an upstream request.
+  selection happens before quota reservation. Later injection failure releases
+  an uncommitted reservation through the fenced at-most-once path without
+  treating provider selection as an upstream request.
 - No hosted gateway-key or tenant credential surface.
 
 Verification:
 
 - Inherited gate plus distinctive markers through planning, execution, debug,
-  errors, cache, metrics, fixtures, replay, cancellation, and adapter failures.
+  errors, cache, metrics, fixtures, replay, cancellation, and adapter failures,
+  plus rotation, aliases, forged IDs, partition explosion, and multiple-client
+  quota continuity.
 
 Exit criteria:
 
@@ -1657,6 +1770,10 @@ Deliverables:
   denied unless the operation policy names it; method-preserving redirects
   require a replayable body and a new time-of-use origin/policy revalidation
   plus fresh quota authority.
+- Every redirect is a bounded `RedirectResponse`, never body-success
+  finalization or `Complete` provenance. A followed redirect starts a freshly
+  branded attempt and resolves the generated quota scope again without
+  creating a caller-selected partition.
 - Fragment rejection, bounded relative-location normalization, and no
   automatic credential forwarding.
 - Redirect canonicalization rejects or uniquely handles percent-encoded
@@ -1679,7 +1796,8 @@ Verification:
   fragment, encoded separator/dot segment/control, duplicate query,
   backslash, Unicode-equivalent, scheme-relative, relative normalization,
   auth challenge, automatic auth, `Retry-After` non-refund/non-broadening,
-  redirect loop/cross-origin, and credential-forwarding tests.
+  redirect loop/cross-origin, redirect-as-success substitution, and
+  credential-forwarding tests.
 
 Exit criteria:
 
@@ -1696,6 +1814,9 @@ service.
 Deliverables:
 
 - Local advisory limiter and coordinated `QuotaAuthority` topology contracts.
+- Generated `QuotaScope` continuity across clients, credential rotation/
+  aliases, operation mixes, and every dossier-required coordinated topology;
+  cache/data partitions cannot create independent upstream quota histories.
 - Re-audit atomic quota/concurrency leases across cancellation, expiry,
   duplicate release, stale fencing token, crash/restart, and ambiguous
   delivery; attempt capacity is not refunded after ambiguity.
@@ -1714,7 +1835,9 @@ Deliverables:
 Verification:
 
 - Inherited gate plus limiter/cache outage, stale policy, kill switch,
-  rollback/jump, retry amplification, and local-versus-coordinated tests.
+  rollback/jump, retry amplification, forged/unknown/partition-explosion,
+  rotation/alias, multiple-client, cache-versus-quota partition, and
+  local-versus-coordinated tests.
 
 Exit criteria:
 
@@ -1757,6 +1880,8 @@ Deliverables:
 - SSRF, parser, secret, executor authority, body replay, policy drift, rate,
   cache, completion-witness ownership, event-sink trust/panic behavior,
   per-attempt witness identity, closed request headers,
+  status-specific response outcomes, quota-scope/credential-partition
+  ownership, cache-validator insertion, body-wire versus network-byte claims,
   conformance-versus-corpus replay, fixture retention expiry, supply-chain,
   and release reviews.
 - Residual-race review documenting that final pre-I/O policy revalidation is
@@ -1820,14 +1945,18 @@ Deliverables:
 - Control map covering transport, wire/decoded body, parsing, allocation,
   retries, redirects, pages, records/cells, collection, encoding, CPU work
   units, and checkpoints.
+- Audit that `BodyWireBytes` charges exactly the content-coded body bytes
+  delivered after transfer framing and before content decoding; header/trailer
+  budgets remain separate, and no Sweden ledger is presented as total
+  TLS/HTTP/network bandwidth.
 - Checked pre-charge semantics, stable exhaustion errors, and tighten-only
   public ceiling changes.
 - Non-`Copy`, non-`Clone` permits where copying would duplicate authority or
   budget.
 - State-transition accounting across authorization, policy revalidation,
-  uncommitted quota reservation, credential failure, authority-local attempt
-  commit, the crash gap before transport invocation, in-flight ambiguity, and
-  fenced concurrency release.
+  credential selection/failure, uncommitted quota reservation, injection
+  failure, authority-local attempt commit, the crash gap before transport
+  invocation, in-flight ambiguity, and fenced concurrency release.
 - Parent/child and cross-layer accounting tests proving that conversion
   between ledgers neither refunds nor double-spends capacity; ambiguous
   network results never refund an attempt permit.
@@ -1838,7 +1967,9 @@ Verification:
   partial-progress, replay, credential-provider failure, pre-handoff
   cancellation, crash after commit/before transport invocation, post-handoff
   ambiguity, sink panic with unwind/abort models, double release, and
-  copied-state compile-fail cases.
+  copied-state compile-fail cases, with transfer-framing-versus-body,
+  header/trailer separation, decompression boundary, and lying-adapter
+  accounting cases.
 
 Exit criteria:
 
@@ -1861,8 +1992,10 @@ Deliverables:
   cache/coordinated-state store, allocator, and event sink callback.
 - Reviewed-adapter conformance suite for closed origin, redirect-as-data,
   exact closed-header handoff without mutation or automatic additions,
-  disabled automatic proxy behavior, bounded decompression, cancellation,
-  deadline-mode accuracy, timeout, redaction, and error translation.
+  normalized response status/framing/singleton/informational/trailer metadata,
+  exact `BodyWireBytes` delivery, disabled automatic proxy behavior, bounded
+  decompression, cancellation, deadline-mode accuracy, timeout, redaction, and
+  error translation.
 - Deployment checklist for DNS, TLS, certificates, proxy, egress, logging,
   clock, and credential-store controls.
 - Separate guarantee tables for Sweden-controlled executors, conforming
@@ -1878,11 +2011,17 @@ Verification:
 - A malicious transport may add, remove, log, or rewrite headers after handoff;
   tests and documentation keep that caller-owned behavior outside the
   Sweden-controlled closed-plan guarantee.
+- Conflicting `Content-Length`/transfer framing, duplicate singleton
+  `Content-Type`/`Content-Encoding`/`Location`/validator metadata, unreviewed
+  informational responses, and ambiguous trailers fail conforming adapters;
+  arbitrary transports may fabricate all metadata and byte counts.
 - Never-waking async and permanently blocking cases under a bounded external
   watchdog, proving `Cooperative` mode makes no hard-preemption claim.
 - Lying clock, over-admitting quota, stale/rollback policy, wrong-scope
   credential, forbidden-retention cache, allocator-overhead, and suppressed
   kill-switch test doubles.
+- Forged quota partition, credential-pool rotation/alias split, partition
+  explosion, multi-client evasion, and secret-derived identity test doubles.
 - Replayed authority observation, wrong clock epoch, reset/wrapped monotonic
   counter, and restart-with-cached-observation test doubles.
 - Event sinks that pause, stop, abort, retain data, block, panic with unwind,
@@ -1917,9 +2056,15 @@ Deliverables:
 - Audit concrete completion ownership from HTTP and codec through
   registry-owned semantic validation to executor-owned final provenance,
   including invariant attempt-brand equality across all witnesses.
+- Audit the closed status-specific outcome profile through body success,
+  `NotModified`, reviewed `NoBody`, redirect, and source error, including
+  cache permission and exact prior-entry matching for `304`.
 - Audit the generated closed header schema, canonical/cache identity
   participation, credential/cache-validator slots, caller metadata bounds,
   and transport-owned framing from plan authorization through handoff.
+- Audit generated `QuotaScope` ownership and credential-pool partition
+  stability/cardinality, including mandatory coordination for source-global,
+  deployment/IP, and other cross-client scopes.
 - Fail-closed invalidation when evidence changes/expires, versions roll back,
   trust roots change, or a kill switch activates.
 - Explicit compiled-policy mode where expiry is the only automatic freshness
@@ -1943,8 +2088,10 @@ Verification:
   absent/stale authority, cached observation after restart, epoch mismatch,
   clock reset/wrap, suppressed revocation, policy rollback, completion witness
   forgery/substitution, concurrent same-operation cross-brand mixing,
-  closed-header substitution, checks after delay/redirect/page transition,
-  documented final-check race, and old-binary simulation tests.
+  closed-header and status-outcome substitution, `304` cache identity/permission
+  mismatch, forged/exploding quota partition, credential rotation/alias
+  continuity, checks after delay/redirect/page transition, documented
+  final-check race, and old-binary simulation tests.
 
 Exit criteria:
 
@@ -2088,6 +2235,10 @@ Deliverables:
 - The same matrix links each closed request-header category and
   canonical/cache/`Vary` decision, attempt-brand witness chain, and official
   corpus retention expiry/purge rule.
+- It also links every registered status to its body/`304`/no-body/redirect/
+  source-error outcome, each cache-validator source and base-key exclusion,
+  the dossier-generated `QuotaScope`/coordination requirement, and the exact
+  body-wire-byte accounting boundary.
 - Explicit unsupported and deferred inventory, including archive formats,
   dependencies, FFI, concrete network adapters, and post-1.0 agencies.
 - Current contradiction tests and plan/metadata consistency report.
@@ -2203,10 +2354,16 @@ Deliverables:
 
 - Deterministic single-process, multi-process, multi-client, outage, and clock
   anomaly simulations.
+- Generated quota-scope simulations for source-global, origin/environment,
+  deployment/IP, credential pool, operation, and each admitted composition,
+  with bounded partition cardinality.
 - Evidence distinguishing local advisory limiting from coordinated shared
   quota enforcement.
 - Required `QuotaAuthority` behavior and fail-closed unavailability for every
   topology whose dossier requires shared coordination.
+- Credential rotation and aliases sharing one upstream pool retain one opaque
+  partition and quota history; forged partitions, new clients, process
+  restarts, and cache/data subdivisions cannot create capacity.
 - Retry amplification, cache stampede, cancellation, and kill-switch
   regression scenarios.
 - Cross-process lease acquisition/release, fencing, expiry, duplicate release,
@@ -2222,7 +2379,8 @@ Deliverables:
 Verification:
 
 - Inherited gate plus repeated seeded simulations proving source and
-  deployment ceilings are never exceeded by reviewed coordinated execution.
+  deployment ceilings are never exceeded by reviewed coordinated execution,
+  including partition-explosion and rotation/alias storms.
 
 Exit criteria:
 
@@ -2404,6 +2562,9 @@ Deliverables:
   unsupported inventory, and SemVer report.
 - Frozen closed-header schemas and attempt-brand/finalization surface, with no
   raw-header or unbranded-witness compatibility escape hatch.
+- Frozen status-outcome algebra, cache-validator insertion contract,
+  `QuotaScope`/credential-partition surface, and `BodyWireBytes` definition,
+  with no generic status, caller partition, or network-bandwidth escape claim.
 - Documentation/examples checked against the same generated metadata.
 - Confirmation that only Trafikverket is production agency scope for 1.0.
 - Change-control rule allowing only release-blocking fixes through 1.0.
@@ -2473,6 +2634,9 @@ Deliverables:
 - Complete declared Trafikverket operation/object matrix.
 - Current source policy, provenance, rate, retry, cache, and attribution
   behavior.
+- Frozen status-specific completion, exact `304` cache revalidation,
+  dossier-owned quota partitions with credential-rotation continuity, and
+  honest adapter-body-wire versus total-network accounting behavior.
 - Full documentation, release evidence, and migration policy.
 
 Verification:

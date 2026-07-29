@@ -16,6 +16,12 @@ Status: foundation model extended for the planned registry/executor boundary
   environment, origin, response-profile, and validator bindings.
 - Integrity of the closed request-header categories, protected slots,
   canonical/cache identity dimensions, and transport-owned framing.
+- Integrity of status-specific body/`304`/empty/redirect/source-error outcome
+  dispatch and the exact prior finalized cache identity required by `304`.
+- Dossier-generated quota scope, provider-owned opaque credential-pool
+  identity, and continuity across shared-pool rotation/aliases.
+- Honest meaning of adapter-delivered body-wire bytes and normalized response
+  metadata.
 - Freshness requirements and the ordering of policy revalidation, quota
   reservation/commit, credential injection, and transport handoff.
 - Non-serializable current-authority observations and their originating
@@ -41,6 +47,12 @@ Status: foundation model extended for the planned registry/executor boundary
   same-operation attempts—or bypassing the registry-owned validator.
 - A caller injecting raw, duplicate, hop-by-hop, framing, control-bearing, or
   representation-changing request headers outside reviewed identity rules.
+- A caller or transport reclassifying `304`, empty, redirect, or source-error
+  responses as body success, or mixing a cached value/validator/partition/
+  version/`Vary` identity.
+- A caller forging or multiplying quota partitions through new clients,
+  operations, cache partitions, credential rotation/aliases, or secret-derived
+  keys.
 - A compromised, malicious, or unexpectedly changed upstream service.
 - An attacker attempting SSRF or credential exfiltration through redirects,
   origins, proxy settings, errors, fixtures, or logs.
@@ -54,6 +66,8 @@ Status: foundation model extended for the planned registry/executor boundary
 - A transport, clock, quota/policy authority, credential provider, cache, or
   allocator that lies, stalls, over-admits, rolls back, leaks, retains, or
   consumes more physical memory than requested.
+- A transport fabricating response status/framing/singleton/trailer metadata
+  or under-reporting body/network bytes.
 - A caller treating provisional streaming events as committed before final
   envelope validation.
 - A cursor-cycle attacker relying on hash collisions or exhausting bounded
@@ -76,13 +90,19 @@ Status: foundation model extended for the planned registry/executor boundary
   generic executor.
 - Closed operation/header schema through canonical/cache identity, late
   protected-slot filling, and transport-owned framing to wire handoff.
+- Selected cache entry through executor-only validator insertion and exact
+  `304` revalidation.
 - Retained authorization to immediate policy freshness revalidation.
 - Policy-revalidated execution to late quota reservation, credentials,
   authority-local attempt commit, the crash gap, and caller transport
   invocation.
+- Credential selection and opaque provider pool identity to registry-generated
+  quota scope and coordinated authority admission.
 - Executor request plan to caller-supplied transport.
 - Closed origin selection to late credential injection.
 - Upstream bytes to bounded codec.
+- Adapter-normalized response metadata and `BodyWireBytes` to status-specific
+  outcome dispatch.
 - Decoded syntax to source semantic validation.
 - Provisional stream events through the producer-owned witness chain to
   executor-owned finalization.
@@ -120,6 +140,10 @@ Status: foundation model extended for the planned registry/executor boundary
   protected late credential and cache-validator slots, dossier-bounded caller
   metadata, transport-owned framing, CRLF/control and hop-by-hop rejection,
   and exact canonical/cache or reviewed `Vary` participation.
+- Cache validators originate only in an already-selected entry, are inserted
+  late, stay outside its base key, and bind exact partition, versions, and
+  reviewed `Vary`; `304` revalidates current cache permission and prior
+  `Finalized<R>` instead of minting semantic completion.
 - Closed `CompiledUntil`/`CurrentAuthorityRequired` freshness modes rechecked
   immediately before credentials/I/O and after waits, redirects, and page
   transitions; callers can tighten but never downgrade them.
@@ -134,12 +158,19 @@ Status: foundation model extended for the planned registry/executor boundary
   two-phase reservation, authority-local attempt commit, conservative
   commit/call crash gap, and fenced at-most-once release distinguish
   credential failure from an in-flight ambiguous attempt.
+- Registry-bound `QuotaScope` recipes replace free-form production
+  partitions. Provider-owned opaque pool IDs remain stable across rotations
+  and aliases sharing upstream capacity, secrets are never key material, and
+  source/deployment/IP or other cross-client scope requires coordination.
 - Official network execution prohibited through `v0.36.0`; full reviewed
   rate/window/concurrency enforcement is required beginning at `v0.37.0`.
 - Separate synthetic `sweden-conformance` source rather than test semantics in
   the generic executor.
 - Provisional stream values cannot create complete provenance, cache entries,
   or advanced checkpoints.
+- Closed response outcomes prevent body, `304`, reviewed empty, redirect, and
+  source-error branches from substituting for one another; only admitted
+  success branches produce or return finalized success provenance.
 - Core owns structural completion vocabulary only. HTTP, each codec, registry,
   and executor privately construct their exact wire, codec, semantic, and
   final witnesses. An executor-established higher-ranked invariant brand binds
@@ -180,6 +211,10 @@ Status: foundation model extended for the planned registry/executor boundary
   conservatively spends an unsent attempt.
 - Caller-provided quota, policy, credential, cache, and allocator
   implementations can invalidate guarantees assigned to those boundaries.
+- `BodyWireBytes` excludes TLS, HTTP transfer/framing, headers,
+  retransmissions, and other network overhead; actual bandwidth enforcement
+  remains a transport/deployment guarantee, and arbitrary transports may lie
+  about metadata or counts.
 - Owned allocation limits cover logical/requested/observable container
   metrics, not allocator metadata, fragmentation, or physical heap usage.
 - Source policy metadata can be wrong or become stale.

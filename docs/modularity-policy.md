@@ -11,15 +11,22 @@ Rules:
   core, policy, and codec crates they need; they do not depend on the facade,
   registry, executor, HTTP, or one another.
 - `sweden-policy` owns source-independent policy algorithms and contracts,
-  never generated agency/source membership.
+  including closed response-outcome and quota-scope vocabulary, never
+  generated agency/source membership or production partition identity.
 - `sweden-registry` owns generated source-specific entries and may depend
   one-way on a selected agency or conformance crate behind a matching feature;
   source crates never depend back on the registry.
 - `sweden-registry` also owns opaque freshness epochs and privately binds
   caller-authority state into non-serializable epoch-specific observations.
+- `sweden-registry` binds each operation's exact status/outcome profile and
+  generated `QuotaScope`; callers cannot replace either with a generic status
+  handler or free-form production partition.
 - `sweden-executor` owns generic execution only. Synthetic operation,
   encoder, decoder, validator, fixture, and output semantics live in the
   separate `sweden-conformance` crate.
+- `sweden-executor` alone selects credentials/opaque pool identity, inserts
+  cache validators, resolves quota scope, dispatches registered response
+  outcomes, and creates successful final provenance.
 - `sweden-core` owns canonical closed request-header categories and structural
   completion/generative attempt vocabulary only; constructing a structural
   attempt brand grants no execution or completion authority.
@@ -28,6 +35,9 @@ Rules:
   semantic-witness construction through the bound validator, and
   `sweden-executor` establishes each higher-ranked attempt scope and alone
   owns same-brand finalization/provenance.
+- `sweden-http` defines normalized response metadata and adapter-delivered
+  `BodyWireBytes`; it does not claim TLS/HTTP framing or total network
+  bandwidth ownership.
 - Transport crates do not own agency semantics.
 - `lib.rs` and binary entry points remain orchestration.
 - Parsing, validation, policy, generated models, hand-written facades, tests,

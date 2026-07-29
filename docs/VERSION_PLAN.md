@@ -42,13 +42,16 @@ replace the established product scope, crate policy, or release gate.
 | Registry evolution, feature alignment, and version-skew denial | `0.9.0`, production entry at `0.24.0` | `0.43.0`, `0.45.0`, `0.98.0` |
 | Time-of-use freshness, clock-epoch-bound observations, and qualified offline invalidation | freshness/epoch types at `0.9.0`, executor revalidation at `0.21.0` | live retry/restart checks at `0.37.0`, audits at `0.48.0`, `0.54.0`, `0.97.0` |
 | Honest residual revalidation/transport revocation race | direct-SDK boundary stated at `0.21.0` | security review at `0.50.0`, stabilization at `0.54.0`; atomicity requires a future admitted grant/broker |
-| Authorization, quota, credential, committed, and in-flight state separation | state model and conservative commit/call gap at `0.21.0` | full two-phase lease at `0.37.0`, audits at `0.45.0`, `0.46.0`, `0.52.0`, `0.91.0` |
+| Authorization, credential selection, quota, injection, committed, and in-flight state separation | state model and conservative commit/call gap at `0.21.0` | full two-phase lease at `0.37.0`, audits at `0.45.0`, `0.46.0`, `0.52.0`, `0.91.0` |
+| Dossier-owned quota scope and opaque credential-pool identity | policy/manifest/registry contracts at `0.7.0..=0.9.0`, provider/executor selection at `0.21.0`/`0.23.0` | enforcement at `0.37.0`, audits at `0.45.0`, `0.46.0`, `0.48.0`, `0.50.0`, `0.54.0`, topology proof at `0.91.0`, freeze at `0.98.0` |
 | Payload-free validation and one shared operation path | `0.2.0`, `0.4.0`, `0.5.0` | `0.39.0`, `0.56.0`, `0.57.0` |
 | Closed typed request headers and canonical/cache dimensions | core categories/rules at `0.5.0`, registry binding at `0.9.0`, generated metadata at `0.20.0`, Trafikverket dossier/credentials at `0.22.0`/`0.23.0` | cache integration at `0.38.0`, audits at `0.43.0`, `0.45.0`, `0.50.0`, `0.54.0`, freeze at `0.98.0` |
+| Executor-only cache-validator insertion and stable base cache identity | slot at `0.5.0`, registry/header binding at `0.9.0`, executor ownership at `0.21.0` | exact `304` integration at `0.38.0`, audits at `0.45.0`, `0.50.0`, `0.54.0`, freeze at `0.98.0` |
 | Consumable pre-charged resource ledgers | `0.3.0`, `0.12.0`, parser and paging milestones | `0.52.0`, `0.56.0`, `0.94.0` |
 | Local ledgers versus coordinated quota authority | ledgers at `0.3.0`, minimal authority contract at `0.9.0`, dry-run executor use at `0.21.0` | algorithms and lease lifecycle at `0.37.0`/`0.48.0`, topology proof at `0.52.0`/`0.91.0` |
 | Stable external clock/quota/policy contract shapes | `0.9.0`, consumed by `0.21.0` | algorithms at `0.37.0`, trust audit at `0.53.0` |
 | `no_std` sans-I/O transport contract | `0.10.0..=0.12.0` | `0.53.0`, `0.55.0`, `0.58.0` |
+| Honest `BodyWireBytes` and normalized response metadata | adapter/body boundary at `0.10.0`, ledgers and status metadata at `0.12.0` | resource audit at `0.52.0`, adapter trust/conformance at `0.53.0`, matrix at `0.59.0`, freeze at `0.98.0` |
 | Strict first-party JSON/XML and conditionally admitted CSV subsets | `0.13.0..=0.18.0`, `0.51.0` | `0.92.0`, `0.93.0` |
 | Decoded-name JSON duplicate detection | `0.14.0` | `0.42.0`, `0.92.0` |
 | Honest owned-allocation accounting | `0.15.0` | `0.41.0`, `0.53.0`, `0.94.0` |
@@ -60,6 +63,7 @@ replace the established product scope, crate policy, or release gate.
 | Honest deadline/preemption modes | contract at `0.11.0`, executor propagation at `0.21.0` | retry integration at `0.37.0`, hostile trust audit at `0.53.0` |
 | Honest trusted-transport boundary | `0.10.0`, `0.21.0`, `0.23.0` | `0.53.0`, `0.58.0` |
 | Provisional versus finalized streaming | `0.12.0`, `0.21.0` | checkpoint/cache enforcement at `0.36.0`, `0.38.0` |
+| Status-specific body/`304`/empty/redirect/source-error completion | registry algebra at `0.9.0`, structural wire outcomes at `0.12.0`, executor dispatch at `0.21.0`, Trafikverket envelope at `0.29.0` | cache `304` at `0.38.0`, redirect state at `0.47.0`, audits at `0.45.0`, `0.50.0`, `0.54.0`, freeze at `0.98.0` |
 | Producer-owned completion witnesses without friend-crate claims | HTTP wire witness at `0.12.0`, JSON/XML witnesses at `0.14.0`/`0.17.0`, registry semantic and executor final witnesses at `0.21.0` | hostile ownership audit at `0.45.0`, stabilization at `0.54.0` |
 | Per-attempt invariant completion identity | structural generativity and branded HTTP witness at `0.12.0`, branded JSON/XML at `0.14.0`/`0.17.0`, executor-established scope and branded semantic/final witnesses at `0.21.0` | concurrent same-operation mixing audit at `0.45.0`, stabilization at `0.54.0`, surface freeze at `0.98.0` |
 | Realizable borrowed visitor, closed sink control, and exact pause ownership | event-boundary pause, caller input, bounded carry, and exact-once charging at `0.12.0`; executor behavior at `0.21.0` | trust audit at `0.53.0`, constrained resume examples at `0.56.0`, parser audits at `0.92.0`/`0.93.0` |
