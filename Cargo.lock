@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "sweden"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "sweden-core",
 ]
 
 [[package]]
 name = "sweden-core"
-version = "0.1.0"
+version = "0.2.0"

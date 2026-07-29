@@ -1,17 +1,17 @@
 [release]
-version = "0.1.0"
+version = "0.2.0"
 policy = "independent"
 
 [crates."sweden-core"]
-previous_version = "0.0.0"
-version = "0.1.0"
+previous_version = "0.1.0"
+version = "0.2.0"
 change = "code"
 publish = true
-reason = "Initial dependency-free shared contracts."
+reason = "Validated descriptive identifiers, closed reviewed source spellings, and non-zero versions."
 
 [crates.sweden]
-previous_version = "0.0.0"
-version = "0.1.0"
-change = "code"
+previous_version = "0.1.0"
+version = "0.2.0"
+change = "dependency"
 publish = true
-reason = "Initial dependency-free facade over sweden-core."
+reason = "Facade release clock and exact dependency on sweden-core 0.2.0."

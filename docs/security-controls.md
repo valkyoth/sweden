@@ -4,6 +4,12 @@
 
 - `#![forbid(unsafe_code)]` in every first-party crate.
 - Dependency-free `no_std` core and facade crates.
+- Canonical bounded borrowed identifiers reject empty, overlong, non-ASCII,
+  uppercase, malformed-separator, and otherwise non-canonical input.
+- Closed project-reviewed source spellings are unconstructible downstream and
+  remain descriptive rather than execution authority.
+- Non-zero schema, policy, and upstream versions plus payload-free validation
+  failures.
 - No default network, TLS, credential, filesystem, clock, or telemetry path.
 - Explicit response budgets.
 - No agency or transport implementation before its planned review milestone.

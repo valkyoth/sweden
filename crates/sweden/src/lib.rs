@@ -9,7 +9,10 @@ pub use sweden_core as core;
 mod tests {
     #[test]
     fn facade_always_exposes_core() {
-        let id = crate::core::SourceId::reviewed("sweden");
-        assert_eq!(id.as_str(), "sweden");
+        let id = crate::core::SourceId::new("sweden");
+        assert!(id.is_ok());
+        if let Ok(value) = id {
+            assert_eq!(value.as_str(), "sweden");
+        }
     }
 }

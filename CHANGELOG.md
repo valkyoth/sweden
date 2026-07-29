@@ -5,8 +5,20 @@ Semantic Versioning for each independently published crate.
 
 ## Unreleased
 
+## 0.2.0 - 2026-07-29
+
 ### Added
 
+- Borrowed, allocation-free `SourceId`, `OperationId`, `SchemaId`, `PolicyId`,
+  and `UpstreamId` types with canonical lowercase ASCII grammar and explicit
+  per-type byte ceilings.
+- Closed `ReviewedSourceId` constants for planned Swedish agency sources,
+  separated from dynamic descriptive IDs and future registry authority.
+- Non-zero `SchemaVersion`, `PolicyVersion`, and `UpstreamVersion` wrappers.
+- Payload-free `ValidationError` categories and `Result`-based validation for
+  identifiers, source descriptors, versions, and response budgets.
+- Compile-fail documentation proving downstream code cannot construct reviewed
+  source identity or execution authority through `sweden-core`.
 - Locked, checksum-verified RFC Editor references for the normative-language,
   Internet date/time, URI, HTTP status, JSON, HTTP semantics, caching, and
   HTTP/1.1 standards used by Sweden's planned source-neutral contracts.

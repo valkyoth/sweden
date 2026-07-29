@@ -175,9 +175,12 @@ def test_dependency_order_is_enforced() -> None:
 
 
 def test_milestone_gate_name_is_supported() -> None:
-    gate = release_crates.release_gate("0.1.0")
-    assert gate is not None
-    assert gate.name == "release_0_1_gate.sh"
+    first_gate = release_crates.release_gate("0.1.0")
+    current_gate = release_crates.release_gate("0.2.0")
+    assert first_gate is not None
+    assert first_gate.name == "release_0_1_gate.sh"
+    assert current_gate is not None
+    assert current_gate.name == "release_0_2_gate.sh"
 
 
 def test_post_tag_preflight_passes_guarded_context() -> None:
@@ -185,15 +188,15 @@ def test_post_tag_preflight_passes_guarded_context() -> None:
     original_run = release_crates.run
     release_crates.run = lambda command, **kwargs: calls.append((command, kwargs))
     try:
-        args = SimpleNamespace(version="0.1.0", skip_checks=False, dry_run=False)
+        args = SimpleNamespace(version="0.2.0", skip_checks=False, dry_run=False)
         release_crates.run_preflight(args, release_tag_at_head=True)
     finally:
         release_crates.run = original_run
     assert calls[0] == (
-        ["scripts/release_0_1_gate.sh"],
+        ["scripts/release_0_2_gate.sh"],
         {
             "dry_run": False,
-            "extra_env": {"SWEDEN_RELEASE_PUBLISH_TAG": "v0.1.0"},
+            "extra_env": {"SWEDEN_RELEASE_PUBLISH_TAG": "v0.2.0"},
         },
     )
 

@@ -30,7 +30,7 @@ cast_possible_truncation = "deny"
 cast_sign_loss = "deny"
 
 [workspace.dependencies]
-sweden-core = { path = "crates/sweden-core", version = "0.1.0" }
+sweden-core = { path = "crates/sweden-core", version = "0.2.0" }
 
 [profile.release]
 overflow-checks = true

@@ -1,6 +1,6 @@
 # Crate Version Matrix
 
-Status: `v0.1.0` release candidate; pentest passed; awaiting GitHub
+Status: `v0.2.0` implementation complete; awaiting maintainer pentest
 
 Sweden uses independent crate versions. The `sweden` facade is the release
 clock and always has exactly the version represented by the repository tag.
@@ -31,12 +31,12 @@ to hide implementation changes.
 counterpart, `release-crates.toml`, against Cargo metadata and refuses
 accidental lockstep publication.
 
-## v0.1.0 Tracking Table
+## v0.2.0 Tracking Table
 
 | Crate | Published | Planned | Change | Publish | Reason |
 | --- | --- | --- | --- | --- | --- |
-| `sweden-core` | Not yet published | `0.1.0` | `code` | Yes | Initial dependency-free shared contracts. |
-| `sweden` | Not yet published | `0.1.0` | `code` | Yes | Initial dependency-free facade over `sweden-core`. |
+| `sweden-core` | `0.1.0` | `0.2.0` | `code` | Yes | Validated descriptive IDs, closed reviewed source spellings, payload-free errors, and non-zero versions. |
+| `sweden` | `0.1.0` | `0.2.0` | `dependency` | Yes | Facade release clock and exact dependency on `sweden-core 0.2.0`. |
 
 Update this table, `release-crates.toml`, affected Cargo manifests, dependency
 pins, release notes, and the pentest report together whenever a crate changes

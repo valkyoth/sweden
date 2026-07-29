@@ -4,6 +4,8 @@ Status: foundation model extended for the planned registry/executor boundary
 
 ## Assets
 
+- Canonical bounded source, operation, schema, policy, and upstream identity,
+  plus non-zero version ordering.
 - Caller and upstream credentials.
 - Correct source, origin, operation, schema, terms, and rate policy.
 - Integrity of the closed registry and the indivisible binding between a

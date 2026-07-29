@@ -1,7 +1,7 @@
 # Sweden Release Plan To 1.0
 
-Status: planning document; `v0.1.0` released; next implementation milestone is
-`v0.2.0`
+Status: planning document; `v0.1.0` released; `v0.2.0` implementation is at
+the maintainer pentest stop
 
 This plan is deliberately granular. Each version is one bounded review and
 pentest pass. Split a version or add a patch release whenever its scope stops

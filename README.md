@@ -35,9 +35,10 @@ access to Swedish public APIs and datasets. Shared logic is dependency-free,
 future networking is isolated in focused `std` crates and is never enabled by
 default.
 
-The repository is at its `0.1.0` foundation. It contains only the two crates
-needed now: `sweden-core` and the `sweden` facade. It does not yet make real
-upstream requests, and no agency integration has been introduced.
+The repository is at its `0.2.0` identifier/version milestone and awaits the
+maintainer pentest. It contains only the two crates needed now: `sweden-core`
+and the `sweden` facade. It does not make real upstream requests, and no agency
+integration has been introduced.
 
 ## Install
 
@@ -45,14 +46,14 @@ The default facade exposes only `sweden-core`:
 
 ```toml
 [dependencies]
-sweden = "0.1.0"
+sweden = "0.2.0"
 ```
 
 Or depend directly on the foundation crate:
 
 ```toml
 [dependencies]
-sweden-core = "0.1.0"
+sweden-core = "0.2.0"
 ```
 
 ## Current Status
@@ -63,6 +64,8 @@ sweden-core = "0.1.0"
 | `no_std` shared core and facade | Available | Default builds contain no `std` import |
 | Third-party dependencies | None | Workspace manifests contain first-party path dependencies only |
 | Unsafe Rust | Forbidden | Every first-party crate uses `#![forbid(unsafe_code)]` |
+| Canonical descriptive identifiers | Available | Borrowed source/operation/schema/policy/upstream IDs reject non-canonical input |
+| Reviewed source spellings | Reserved only | Closed constants remain descriptive and cannot authorize execution |
 | Agency integrations | Not introduced | Source crates begin only when their implementation milestone starts |
 | HTTP/TLS implementation | Not implemented | The transport crate is deferred until its contract milestone |
 | Production readiness | Not ready | Production admission is reserved for `1.0.0` after audit and pentest evidence |
@@ -176,7 +179,7 @@ python3 scripts/test-rfc-sources.py
 Run the networked freshness and release gate only when preparing a release:
 
 ```bash
-scripts/release_0_1_gate.sh
+scripts/release_0_2_gate.sh
 ```
 
 No tag is created when implementation finishes. Every version stops for the
@@ -191,7 +194,7 @@ dependency order:
 
 ```bash
 scripts/release_crates.py --check
-scripts/release_crates.py --version 0.1.0 --require-tag
+scripts/release_crates.py --version 0.2.0 --require-tag
 ```
 
 ## Documentation
