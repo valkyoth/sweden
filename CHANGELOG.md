@@ -25,6 +25,10 @@ Semantic Versioning for each independently published crate.
 
 ### Fixed
 
+- Enforced reviewed-source canonical spelling at compile time using the same
+  validator as dynamic identifiers, and centralized identifier string
+  exposure through `as_str()`.
+
 - RFC verification now accepts the owner-writable files produced by a fresh
   Git checkout while retaining checksum-based tamper rejection, and shell
   syntax checks use each script's declared `sh` or Bash interpreter.

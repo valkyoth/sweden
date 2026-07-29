@@ -34,6 +34,9 @@ claim that any agency integration is complete. Identifiers and reviewed source
 spellings are descriptive only. They cannot create registry membership,
 operation authority, or permission to execute.
 
+Every reviewed-source literal is checked at compile time by the same canonical
+validator used for dynamic IDs. A malformed future constant cannot compile.
+
 Canonical identifiers start with a lowercase ASCII letter. Remaining bytes are
 lowercase ASCII letters, digits, `-`, or `.`, with no adjacent or trailing
 separator. Constructors reject empty, overlong, non-ASCII, uppercase, or

@@ -20,41 +20,55 @@ impl<'a> CanonicalId<'a> {
     }
 }
 
-fn validate(value: &str, maximum: usize) -> Result<(), ValidationError> {
+const fn validation_error(value: &str, maximum: usize) -> Option<ValidationError> {
     if value.is_empty() {
-        return Err(ValidationError::Empty);
+        return Some(ValidationError::Empty);
     }
     if value.len() > maximum {
-        return Err(ValidationError::TooLong);
+        return Some(ValidationError::TooLong);
     }
 
-    let mut first = true;
-    let mut previous_separator = false;
-    for byte in value.bytes() {
-        if first {
-            if !byte.is_ascii_lowercase() {
-                return Err(ValidationError::InvalidStart);
-            }
-            first = false;
-            continue;
-        }
+    let (first, mut remaining) = match value.as_bytes().split_first() {
+        Some(parts) => parts,
+        None => return Some(ValidationError::Empty),
+    };
+    if !first.is_ascii_lowercase() {
+        return Some(ValidationError::InvalidStart);
+    }
 
+    let mut previous_separator = false;
+    while let Some((byte, rest)) = remaining.split_first() {
         if byte.is_ascii_lowercase() || byte.is_ascii_digit() {
             previous_separator = false;
-        } else if byte == b'-' || byte == b'.' {
+        } else if *byte == b'-' || *byte == b'.' {
             if previous_separator {
-                return Err(ValidationError::InvalidSeparator);
+                return Some(ValidationError::InvalidSeparator);
             }
             previous_separator = true;
         } else {
-            return Err(ValidationError::InvalidCharacter);
+            return Some(ValidationError::InvalidCharacter);
         }
+        remaining = rest;
     }
 
     if previous_separator {
-        return Err(ValidationError::InvalidSeparator);
+        return Some(ValidationError::InvalidSeparator);
     }
-    Ok(())
+    None
+}
+
+const fn canonical_literal_marker(value: &str, maximum: usize) -> usize {
+    match validation_error(value, maximum) {
+        None => 1,
+        Some(_) => 0,
+    }
+}
+
+fn validate(value: &str, maximum: usize) -> Result<(), ValidationError> {
+    match validation_error(value, maximum) {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }
 
 macro_rules! define_identifier {
@@ -90,13 +104,13 @@ macro_rules! define_identifier {
 
         impl AsRef<str> for $name<'_> {
             fn as_ref(&self) -> &str {
-                self.0.0
+                self.as_str()
             }
         }
 
         impl fmt::Display for $name<'_> {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str(self.0.0)
+                formatter.write_str(self.as_str())
             }
         }
 
@@ -164,13 +178,13 @@ impl ReviewedSourceId {
 
 impl AsRef<str> for ReviewedSourceId {
     fn as_ref(&self) -> &str {
-        self.0.0.0
+        self.as_str()
     }
 }
 
 impl fmt::Display for ReviewedSourceId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0.0.0)
+        formatter.write_str(self.as_str())
     }
 }
 
@@ -196,6 +210,11 @@ pub mod reviewed_sources {
             )+
         ) => {
             $(
+                const _: [(); 1] = [(); super::canonical_literal_marker(
+                    $value,
+                    super::SourceId::MAX_LENGTH,
+                )];
+
                 $(#[$meta])*
                 pub const $name: ReviewedSourceId =
                     ReviewedSourceId::from_project_constant($value);
@@ -223,7 +242,8 @@ pub mod reviewed_sources {
 #[cfg(test)]
 mod tests {
     use super::{
-        OperationId, PolicyId, SchemaId, SourceId, UpstreamId, reviewed_sources, validate,
+        OperationId, PolicyId, SchemaId, SourceId, UpstreamId, canonical_literal_marker,
+        reviewed_sources, validate,
     };
     use crate::ValidationError;
 
@@ -324,6 +344,21 @@ mod tests {
                 reviewed
             );
         }
+    }
+
+    #[test]
+    fn compile_time_marker_rejects_every_invalid_category() {
+        for value in ["", "Invalid", "invalid-", "invalid_name"] {
+            assert_eq!(
+                canonical_literal_marker(value, SourceId::MAX_LENGTH),
+                0,
+                "{value}"
+            );
+        }
+        assert_eq!(
+            canonical_literal_marker("trafikverket", SourceId::MAX_LENGTH),
+            1
+        );
     }
 
     #[test]

@@ -48,6 +48,8 @@ operation.
 - No third-party project dependencies or unsafe Rust.
 - Compile-fail doctests prove downstream code cannot construct a
   `ReviewedSourceId` or obtain execution authority from `sweden-core`.
+- Every reviewed-source literal is compile-time checked with the same
+  canonical validator used by dynamic identifiers, without enabling panic.
 - Boundary tests cover empty, exact-limit, one-over, every ASCII byte,
   malformed separators, non-ASCII input, zero, and maximum versions.
 - Exact RFC reference bytes remain checksum pinned and excluded from crate
