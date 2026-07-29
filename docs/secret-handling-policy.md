@@ -7,6 +7,8 @@ Before credential support is added:
 - secret types must not implement `Copy`, secret-revealing `Debug`, or
   `Display`;
 - credentials must be inserted only after a closed origin is selected;
+- credential headers must use protected typed late-injection slots; callers
+  cannot override them or supply a raw header map;
 - canonical request hashes, cache keys, fixtures, metrics, logs, errors, and
   panic messages must exclude secret material;
 - query-string credentials require a separate uncredentialed representation;

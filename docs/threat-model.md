@@ -12,7 +12,10 @@ Status: foundation model extended for the planned registry/executor boundary
 - One-use authorization, quota/concurrency lease, fencing, and completion
   state.
 - Producer-owned wire, codec, semantic, and final completion witnesses and
-  their execution/codec/registry bindings.
+  their invariant per-attempt, codec, registry/version, operation,
+  environment, origin, response-profile, and validator bindings.
+- Integrity of the closed request-header categories, protected slots,
+  canonical/cache identity dimensions, and transport-owned framing.
 - Freshness requirements and the ordering of policy revalidation, quota
   reservation/commit, credential injection, and transport handoff.
 - Non-serializable current-authority observations and their originating
@@ -34,7 +37,10 @@ Status: foundation model extended for the planned registry/executor boundary
   downgrading its freshness requirement, or skipping/reordering time-of-use
   policy, quota, credential, and attempt states.
 - A downstream crate forging a completion witness, substituting JSON/XML or
-  cross-execution witnesses, or bypassing the registry-owned validator.
+  cross-execution witnesses—including valid witnesses from concurrent
+  same-operation attempts—or bypassing the registry-owned validator.
+- A caller injecting raw, duplicate, hop-by-hop, framing, control-bearing, or
+  representation-changing request headers outside reviewed identity rules.
 - A compromised, malicious, or unexpectedly changed upstream service.
 - An attacker attempting SSRF or credential exfiltration through redirects,
   origins, proxy settings, errors, fixtures, or logs.
@@ -53,7 +59,8 @@ Status: foundation model extended for the planned registry/executor boundary
 - A cursor-cycle attacker relying on hash collisions or exhausting bounded
   history so paging repeats indefinitely.
 - A recorder or replay consumer attempting to retain protected official data,
-  scrub personal data best-effort, or use expired/mismatched fixture evidence.
+  scrub personal data best-effort, use expired/mismatched fixture evidence, or
+  keep official corpus bytes after retention permission expires.
 - An event sink callback copying data, blocking forever, panicking, consuming
   unbounded CPU, or returning misleading application errors.
 - A process reusing cached authority observations after restart, monotonic
@@ -67,6 +74,8 @@ Status: foundation model extended for the planned registry/executor boundary
   registry-created `AuthorizedExecution<R>`.
 - Bound canonical request/encoder/decoder/validator/output package to the
   generic executor.
+- Closed operation/header schema through canonical/cache identity, late
+  protected-slot filling, and transport-owned framing to wire handoff.
 - Retained authorization to immediate policy freshness revalidation.
 - Policy-revalidated execution to late quota reservation, credentials,
   authority-local attempt commit, the crash gap, and caller transport
@@ -78,7 +87,8 @@ Status: foundation model extended for the planned registry/executor boundary
 - Provisional stream events through the producer-owned witness chain to
   executor-owned finalization.
 - HTTP to private wire completion, codec to its private syntax completion,
-  registry validator to semantic completion, and executor to final provenance.
+  registry validator to semantic completion, and executor-established
+  invariant attempt scope to final provenance.
 - Borrowed event delivery to the caller-owned sink callback and its
   continue/pause/stop/abort decision.
 - Raw source data to normalized or transformed data.
@@ -106,9 +116,16 @@ Status: foundation model extended for the planned registry/executor boundary
 - Private, non-cloneable `AuthorizedExecution<R>` construction that embeds the
   exact reviewed encoder, response, decoder, validator, output, limit, and
   finalization profiles; the executor accepts no arbitrary replacement.
+- Closed typed request-header categories with canonical case/duplicate rules,
+  protected late credential and cache-validator slots, dossier-bounded caller
+  metadata, transport-owned framing, CRLF/control and hop-by-hop rejection,
+  and exact canonical/cache or reviewed `Vary` participation.
 - Closed `CompiledUntil`/`CurrentAuthorityRequired` freshness modes rechecked
   immediately before credentials/I/O and after waits, redirects, and page
   transitions; callers can tighten but never downgrade them.
+- The direct SDK documents the residual race between final revalidation and a
+  caller transport call; atomic revocation requires a controlled broker or a
+  separately admitted authority-issued one-attempt grant.
 - Registry-owned `FreshnessEpoch` and privately constructed
   `AuthorityObservation<'epoch>` prevent caller authority state from becoming
   a reusable bound observation. They cannot cross sessions; reset, wrap,
@@ -125,7 +142,9 @@ Status: foundation model extended for the planned registry/executor boundary
   or advanced checkpoints.
 - Core owns structural completion vocabulary only. HTTP, each codec, registry,
   and executor privately construct their exact wire, codec, semantic, and
-  final witnesses; cross-codec/execution substitution fails.
+  final witnesses. An executor-established higher-ranked invariant brand binds
+  them to one attempt; cross-codec and concurrent same-operation substitution
+  fails.
 - Borrowed events cannot escape synchronous visitor callbacks. Closed
   continue/pause/stop/abort results preserve provisional state correctly, and
   only exact producer witnesses can create `Complete` provenance.
@@ -134,7 +153,8 @@ Status: foundation model extended for the planned registry/executor boundary
   recording fails closed and replay revalidates bound evidence.
 - `ConformanceReplay` requires current matching evidence; `CorpusReplay` is
   untrusted bytes only and cannot authorize I/O, provenance, cache, or
-  checkpoint state.
+  checkpoint state. Corpus use still revalidates retention and purges or denies
+  official bytes after permission expiry/withdrawal.
 - Paging stores exact bounded cursor identities and stops when history
   capacity is insufficient; hashes never decide equality.
 - Payload-free logging by default.
@@ -152,6 +172,9 @@ Status: foundation model extended for the planned registry/executor boundary
   itself; deadline guarantees depend on the declared transport/runtime mode.
 - Caller event sinks can block, panic, copy data, or consume arbitrary CPU.
   Portable `no_std` code cannot catch panics or guarantee callback cleanup.
+- Policy may be revoked after the final authority check but before a
+  caller-owned transport sends; direct SDK revalidation is deliberately not
+  described as atomic revocation.
 - Quota commit is atomic only inside the authority, not with external network
   transmission; a crash after commit but before the transport call
   conservatively spends an unsent attempt.

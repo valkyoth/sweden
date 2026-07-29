@@ -213,8 +213,20 @@ Deliverables:
 
 - `Operation<Input>` to credential-free `CanonicalPlan<Unauthenticated>`
   typestate with private authorization transitions.
-- Method, reviewed structured path/query fields, protected credential slots,
-  and bounded body plan.
+- Method, reviewed structured path/query fields, and bounded body plan.
+- Closed typed request-header categories:
+  reviewed static representation headers (`Accept`, `Content-Type`, API
+  version, and `Accept-Encoding: identity`), protected late credential slots,
+  typed `If-None-Match`/`If-Modified-Since` cache-validator slots, explicitly
+  dossier-permitted bounded caller-metadata slots, and transport-owned framing
+  such as `Content-Length` that callers cannot set.
+- Canonical ASCII case-insensitive name identity, per-category
+  singleton/reviewed-duplicate rules, CR/LF/control and invalid-name/value
+  rejection, hop-by-hop prohibition, and per-field/aggregate byte and count
+  budgets. No raw header map or generic name/value escape hatch.
+- Representation-affecting headers participate in canonical/cache identity or
+  an explicit reviewed `Vary` dimension; credentials, transport framing, and
+  operational diagnostics never do.
 - `Replayable` and `OneShot` body typestates so consumption and ambiguous
   delivery constrain all later retry/redirect decisions.
 - Canonical credential-free representation.
@@ -229,12 +241,17 @@ Verification:
   including percent-encoded separators/dot segments, duplicate query keys,
   backslashes, Unicode-equivalent spellings, fragments, scheme-relative
   forms, and encoded controls.
+- Header goldens and negative cases for case variants, duplicate singleton
+  fields, CRLF injection, controls, hop-by-hop names, forbidden framing,
+  protected-slot override, unknown caller metadata, and every size/count
+  boundary.
 - Prove no arbitrary scheme, authority, or absolute URL is representable.
 
 Exit criteria:
 
 - Agency operations can describe a bounded request without choosing transport,
-  and no public constructor can mint an authorized plan or arbitrary origin.
+  and no public constructor can mint an authorized plan, arbitrary origin, or
+  unreviewed header.
 - `v0.5.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.6.0 - Closed Origin Registry
@@ -349,6 +366,9 @@ Deliverables:
   semantic validator, output/provenance type, limits, finalization behavior,
   origin, environment, policy/dossier/schema versions, reviewer trust root,
   expiry, quota requirement, and kill-switch state to later execution.
+- Registry entries bind the exact generated header schema and canonical/cache
+  participation rules from `v0.5.0`; authorization rejects missing, extra,
+  duplicate, or differently classified header slots.
 - Closed registry-bound `FreshnessRequirement`:
   `CompiledUntil { not_after }` or
   `CurrentAuthorityRequired { minimum_version, maximum_staleness }`.
@@ -480,15 +500,22 @@ Deliverables:
   `EventSink<F>::on_event<'event>(F::Event<'event>) -> SinkControl`.
   `SinkControl` is a closed `Continue`, `Pause`, `StopEarly`, or
   `Abort(SafeSinkCode)` decision.
-- `Pause` returns bounded resumable provisional state without accepting the
-  next event. `StopEarly`, sink abort, callback panic, and cancellation remain
-  incomplete and cannot create cache/checkpoint/provenance completion.
+- `Pause` occurs only after a complete event callback. Unconsumed input remains
+  in caller storage; only explicitly bounded, already-charged decoder carry
+  may be retained. A paused decoder rejects the next transport chunk, and
+  resume neither exposes nor charges any byte/work unit twice.
+  `StopEarly`, sink abort, callback panic, and cancellation remain incomplete
+  and cannot create cache/checkpoint/provenance completion.
 - Arbitrary sink errors are collapsed immediately to `SafeSinkCode` and never
   retained as `Error::source()`. Callbacks are trusted caller code: they may
   copy data, block, panic, or consume arbitrary CPU, and portable `no_std`
   Sweden cannot catch their panic or guarantee isolation.
 - `sweden-core` owns structural completion traits/status only.
-  `sweden-http` privately constructs opaque `WireComplete` after exact body,
+  It also owns the authority-free invariant `AttemptBrand<'attempt, R>`
+  generativity primitive required across dependency-neutral producer crates;
+  constructing a brand grants no completion or execution authority.
+  `sweden-http` privately constructs opaque
+  `WireComplete<'attempt, R>` carrying that exact brand after exact body,
   trailer, and transport completion; downstream crates cannot call its
   constructor.
 - No cache insertion, checkpoint/cursor advance, or `Complete` provenance from
@@ -514,7 +541,9 @@ Verification:
   valid-prefix/truncation tests.
 - Compile tests proving a borrowed event cannot escape `on_event`, plus
   every sink decision, pause/resume, stop/abort provisional behavior, safe
-  error collapse, and forged `WireComplete` construction tests.
+  error collapse, paused-next-chunk denial, caller-input versus decoder-carry
+  ownership, exact-once charging after resume, and forged/cross-brand
+  `WireComplete` construction tests.
 - Panic and never-returning callbacks run in a bounded subprocess/watchdog;
   tests document that attempt and concurrency handling depends on whether the
   callback runs before or after attempt commit and whether unwinding occurs.
@@ -571,8 +600,9 @@ Deliverables:
 - Borrowed `EventSink` callbacks with caller scratch for decoded strings; an
   event cannot outlive its callback. Retention requires the bounded owned
   `alloc` path.
-- Mandatory `finish()` privately constructing opaque `JsonComplete` only
-  after exact complete structure validation. It cannot manufacture
+- Mandatory `finish()` privately constructing opaque
+  `JsonComplete<'attempt, R>` carrying the supplied invariant attempt brand
+  only after exact complete structure validation. It cannot manufacture
   `WireComplete`, `XmlComplete`, semantic completion, or final provenance.
 - Source-decoder hooks.
 
@@ -583,7 +613,8 @@ Verification:
   fixtures, scratch exhaustion, re-decode work exhaustion, and token-budget
   exhaustion tests.
 - Compile-fail borrowed-event escape tests and callback re-entry/abort tests.
-- Hostile construction and cross-codec substitution tests for `JsonComplete`.
+- Hostile construction plus cross-codec and cross-attempt substitution tests
+  for `JsonComplete`.
 
 Exit criteria:
 
@@ -668,15 +699,17 @@ Deliverables:
   reserved-prefix enforcement, exact-consumption, and duplicate singleton
   policy.
 - The same non-escaping borrowed `EventSink` interface as JSON.
-- Mandatory `finish()` privately constructing opaque `XmlComplete` only after
-  closing every element and consuming the complete document. It cannot
-  manufacture `WireComplete`, `JsonComplete`, semantic completion, or final
-  provenance.
+- Mandatory `finish()` privately constructing opaque
+  `XmlComplete<'attempt, R>` carrying the supplied invariant attempt brand
+  only after closing every element and consuming the complete document. It
+  cannot manufacture `WireComplete`, `JsonComplete`, semantic completion, or
+  final provenance.
 
 Verification:
 
 - Inherited gate plus mismatched tags, namespace shadowing, deep input, repeated
-  singleton, budget, hostile-construction, and cross-codec substitution tests.
+  singleton, budget, hostile-construction, and cross-codec/cross-attempt
+  substitution tests.
 
 Exit criteria:
 
@@ -730,6 +763,9 @@ Deliverables:
   provenance, populate caches, advance checkpoints, or update canonical
   fixtures. Retention/deletion remains governed by the applicable dossier even
   when bytes are used only as corpus.
+- Corpus admission revalidates retention permission at use time. Expired or
+  withdrawn official bytes are purged from managed corpora or denied; only
+  synthetic or still-lawfully-retained bytes remain admissible.
 - Fail-closed recording for unknown header classes and transport conformance
   fixtures for redirect, proxy, decompression, cancellation, and truncation.
 - Closed adapter diagnostics that cannot preserve an arbitrary underlying
@@ -743,7 +779,8 @@ Verification:
   order, and replay determinism.
 - Explicit synthetic-default, official-denied, personal/sensitive-denied,
   permitted-public, expired, cross-operation, conformance-versus-corpus, and
-  corpus-authority-denial cases.
+  corpus-authority-denial cases, plus retention expiry/withdrawal purge and
+  denial tests.
 
 Exit criteria:
 
@@ -766,8 +803,12 @@ Deliverables:
 - Generated fixture-policy metadata and contradiction tests for data
   classification, retention, redistribution, evidence expiry, and replay
   compatibility.
+- Generated header-slot/category metadata, duplicate and canonical/cache
+  participation rules, and contradictions for raw, unknown, framing, or
+  representation-affecting headers without reviewed identity dimensions.
 - Generated, type-distinct `ConformanceReplay` and `CorpusReplay` admission
-  metadata; corpus generation strips current-authority/provenance capability.
+  metadata; corpus generation strips current-authority/provenance capability
+  while retaining enforceable retention expiry/withdrawal metadata.
 - Manifest hashes and generated-file headers.
 - Generated-file inventory with family-based splitting that keeps every Rust
   source file below 500 lines.
@@ -819,6 +860,14 @@ Deliverables:
 - `AuthorityObservation<'epoch>` cannot cross executor/clock sessions; restart,
   monotonic reset/wrap, or epoch mismatch forces re-observation before
   `PolicyRevalidated<R>`.
+- Each state sequence runs inside an executor-established higher-ranked
+  attempt scope using core's non-serializable invariant
+  `AttemptBrand<'attempt, R>`. The brand cannot escape or be recreated in safe
+  Rust and binds all later states and witnesses to one attempt.
+- Immediate pre-I/O revalidation narrows but cannot eliminate revocation after
+  the last authority observation and before an external transport call.
+  Atomic revocation is not claimed; it would require a separately reviewed
+  authority-issued one-attempt grant or controlled policy/transport broker.
 - Late quota reservation and concurrency acquisition. Credential-provider
   failure or final pre-I/O denial cancels the uncommitted attempt reservation,
   releases concurrency at most once, and does not spend a network attempt.
@@ -834,9 +883,11 @@ Deliverables:
 - Blocking and async mock execution.
 - JSON and XML `EventSink` fixture paths. `sweden-registry` invokes the bound
   semantic validator and privately constructs a registry/operation/output
-  bound semantic witness. `sweden-executor` alone consumes matching
-  `WireComplete`, `JsonComplete`/`XmlComplete`, and semantic witnesses to
-  privately construct `Finalized<R>` and `Complete` provenance.
+  bound semantic witness carrying the same invariant attempt brand and exact
+  registry version, operation, environment, origin, response profile, codec,
+  and validator identity. `sweden-executor` alone consumes matching branded
+  `WireComplete`, `JsonComplete`/`XmlComplete`, and semantic witnesses inside
+  that scope to privately construct `Finalized<R>` and `Complete` provenance.
 - Sink stop/abort/panic never produces any completion witness. After quota
   commit, cancellation or panic spends the attempt; concurrency uses an
   unwind/drop guard only where unwinding actually occurs and otherwise
@@ -861,8 +912,9 @@ Verification:
   reservation cancellation, double release, pre-handoff versus ambiguous
   post-handoff failure, crash between quota commit and transport invocation,
   sink continue/pause/stop/abort/panic, cross-execution/cross-codec witness
-  substitution, hostile witness construction, deadline-mode propagation, and
-  preflight corpus replay.
+  substitution including two concurrent attempts of the same operation and
+  type, hostile witness construction, final-check/revocation race
+  documentation, deadline-mode propagation, and preflight corpus replay.
 
 Exit criteria:
 
@@ -887,9 +939,13 @@ Deliverables:
 - At most four named 1.0 model-slice slots mapped to
   `v0.31.0..=v0.34.0`; an unused slot is an explicit no-slice decision and
   additional families remain post-1.0.
-- Authentication, redirect, retry, pagination, cache, transformation,
-  redistribution, hosted-use, and data-class decisions for each candidate
-  operation.
+- Authentication, redirect, retry, pagination, cache, retention,
+  transformation, redistribution, hosted-use, and data-class decisions for
+  each candidate operation, including expiry/withdrawal purge or denial.
+- Per-operation request-header inventory classifying every static,
+  credential, cache-validator, caller-metadata, and transport-framing field,
+  including duplicate rules, budgets, canonical/cache identity participation,
+  reviewed `Vary` dimensions, and explicit exclusions.
 
 Verification:
 
@@ -911,6 +967,9 @@ Deliverables:
 - Late API-key injection into a narrow Sweden-controlled execution sink.
 - Credential-free canonical request and cache identity plus a distinct
   ephemeral wire target for source-mandated query credentials.
+- Trafikverket's generated static and credential header slots, with protected
+  override denial; no raw caller headers, hop-by-hop fields, or caller-owned
+  framing.
 - Secret/provider types without revealing `Debug`, `Display`, `Hash`,
   serialization, `Copy`, `Clone`, or public byte getters.
 - Redaction, full-URL exclusion, and wrong-origin negative tests.
@@ -1325,6 +1384,10 @@ Deliverables:
   `Fresh`/`StaleWithin`/`CacheOnly` modes, and purge dimensions.
 - Typed `ETag` and `Last-Modified` validators with size/character ceilings,
   reviewed `Vary` dimensions, and strict `304` metadata merging.
+- Cache validators enter requests only through the closed
+  `CacheValidatorSlot`; representation-affecting request headers are exact
+  canonical-key or reviewed `Vary` dimensions, while credentials, framing,
+  and diagnostics are excluded.
 - Policy/schema version changes invalidate validators; secrets and arbitrary
   headers cannot become validator or cache-key dimensions.
 - Caller-supplied collision-resistant key function where hashing is required,
@@ -1340,7 +1403,8 @@ Verification:
 
 - Inherited gate plus credential exclusion, collision, stale, policy-change,
   raw/derived, ETag/Last-Modified bounds, `304` merge, unreviewed `Vary`,
-  validator invalidation, and purge tests.
+  validator invalidation, protected/header-class substitution, and purge
+  tests.
 
 Exit criteria:
 
@@ -1459,6 +1523,11 @@ Deliverables:
   default, official retention, redistribution, classification, evidence
   expiry, unsupported recording, authoritative `ConformanceReplay`, and
   powerless `CorpusReplay`.
+- Generated per-operation request-header table covering every category,
+  duplicate rule, bound, canonical/cache identity dimension, `Vary` decision,
+  and transport-owned exclusion.
+- Corpus documentation distinguishes evidence expiry from retention expiry and
+  states the purge/deny behavior when official-byte retention lapses.
 - Compile-tested examples labeled by `no_std/no_alloc`, `no_std+alloc`, `std`
   orchestration, or external-adapter capability tier, plus migration policy.
 - Current source dossier hashes.
@@ -1517,6 +1586,14 @@ Deliverables:
   HTTP owns `WireComplete`, each codec owns its exact completion witness,
   registry owns semantic validation/witness creation, and executor owns
   `Finalized<R>`/complete provenance.
+- Attempt-identity audit proving core's authority-free generativity primitive
+  is invariant, executor establishes one higher-ranked scope per execution,
+  all producer witnesses carry that scope plus the exact registry/operation/
+  environment/origin/profile/codec/validator binding, and partial witnesses
+  cannot escape into another attempt.
+- Closed-header audit from operation input through generated registry entry,
+  credential/cache slots, and transport handoff; no raw map, caller framing,
+  protected override, unreviewed `Vary`, or canonical-identity bypass.
 - Compile-fail boundaries proving the facade contains wiring only, agency
   crates do not depend on HTTP/executor, and callers cannot construct
   authorized states.
@@ -1527,7 +1604,9 @@ Verification:
 - Inherited gate plus forbidden-edge, forged-state, registry/policy
   version-skew, freshness downgrade, decoder/validator/output substitution,
   forged/cross-codec/cross-execution completion witnesses, skipped/reordered
-  state, double-execution, cancellation, and blocking/async equivalence tests.
+  state, concurrent same-operation witness mixing, header-category
+  substitution, double-execution, cancellation, and blocking/async
+  equivalence tests.
 
 Exit criteria:
 
@@ -1677,8 +1756,12 @@ Deliverables:
 - Updated threat model, attack-surface inventory, abuse cases, and control map.
 - SSRF, parser, secret, executor authority, body replay, policy drift, rate,
   cache, completion-witness ownership, event-sink trust/panic behavior,
-  conformance-versus-corpus replay, fixture retention, supply-chain, and
-  release reviews.
+  per-attempt witness identity, closed request headers,
+  conformance-versus-corpus replay, fixture retention expiry, supply-chain,
+  and release reviews.
+- Residual-race review documenting that final pre-I/O policy revalidation is
+  not atomic with a caller transport and that stronger revocation requires a
+  controlled broker or separately admitted authority-issued attempt grant.
 - Explicit trust-boundary review separating Sweden-controlled validation from
   arbitrary transport, DNS, TLS, proxy, clock, credential-store, and
   deployment behavior.
@@ -1777,6 +1860,7 @@ Deliverables:
   clocks, quota authority, policy/kill-switch authority, credential provider,
   cache/coordinated-state store, allocator, and event sink callback.
 - Reviewed-adapter conformance suite for closed origin, redirect-as-data,
+  exact closed-header handoff without mutation or automatic additions,
   disabled automatic proxy behavior, bounded decompression, cancellation,
   deadline-mode accuracy, timeout, redaction, and error translation.
 - Deployment checklist for DNS, TLS, certificates, proxy, egress, logging,
@@ -1791,6 +1875,9 @@ Verification:
 - Inherited gate plus intentionally malicious/non-conforming transport tests
   demonstrating the boundary of the guarantee without weakening planner
   validation.
+- A malicious transport may add, remove, log, or rewrite headers after handoff;
+  tests and documentation keep that caller-owned behavior outside the
+  Sweden-controlled closed-plan guarantee.
 - Never-waking async and permanently blocking cases under a bounded external
   watchdog, proving `Cooperative` mode makes no hard-preemption claim.
 - Lying clock, over-admitting quota, stale/rollback policy, wrong-scope
@@ -1828,7 +1915,11 @@ Deliverables:
   decoder, validator, output/provenance type, limits, and finalization through
   executor, retry, redirect, and next-page consumption.
 - Audit concrete completion ownership from HTTP and codec through
-  registry-owned semantic validation to executor-owned final provenance.
+  registry-owned semantic validation to executor-owned final provenance,
+  including invariant attempt-brand equality across all witnesses.
+- Audit the generated closed header schema, canonical/cache identity
+  participation, credential/cache-validator slots, caller metadata bounds,
+  and transport-owned framing from plan authorization through handoff.
 - Fail-closed invalidation when evidence changes/expires, versions roll back,
   trust roots change, or a kill switch activates.
 - Explicit compiled-policy mode where expiry is the only automatic freshness
@@ -1839,6 +1930,10 @@ Deliverables:
 - Explicit offline qualification: publishing a registry/policy release cannot
   remotely revoke an already deployed old binary; only its compiled expiry or
   configured trusted authority can do so.
+- Explicit final-check race qualification: even current authority state can
+  change between revalidation and an external transport call; the direct SDK
+  does not claim atomic revocation without a controlled broker or separately
+  admitted per-attempt authority grant.
 - `IntegrationStatus` retained only as descriptive metadata.
 
 Verification:
@@ -1847,8 +1942,9 @@ Verification:
   schema drift, forged status, retained authorization, freshness downgrade,
   absent/stale authority, cached observation after restart, epoch mismatch,
   clock reset/wrap, suppressed revocation, policy rollback, completion witness
-  forgery/substitution, checks after delay/redirect/page transition, and
-  old-binary simulation tests.
+  forgery/substitution, concurrent same-operation cross-brand mixing,
+  closed-header substitution, checks after delay/redirect/page transition,
+  documented final-check race, and old-binary simulation tests.
 
 Exit criteria:
 
@@ -1894,6 +1990,9 @@ Deliverables:
 - `EventSink` callback lifetime guidance and compile-tested sync/async bridge
   examples for continue, pause/resume, stop, and abort; callers needing
   retention use explicit bounded owned events.
+- Pause examples identify the completed event boundary, keep unconsumed input
+  in caller storage, bound and charge decoder carry exactly once, reject the
+  next chunk while paused, and resume without duplicate exposure or charging.
 - Explicit callback trust guidance: arbitrary work, blocking, data copying,
   panic-unwind versus panic-abort cleanup, and lease-expiry recovery.
 - Stable `NeedRequestCapacity` and `NeedScratch`-style errors with computable
@@ -1908,7 +2007,8 @@ Deliverables:
 
 Verification:
 
-- Inherited gate plus tiny-buffer, short-write, interruption, resume,
+- Inherited gate plus tiny-buffer, short-write, interruption, paused-input
+  ownership, next-chunk rejection, exact-once resume accounting,
   cancellation, and low-bandwidth deterministic simulations.
 
 Exit criteria:
@@ -1985,6 +2085,9 @@ Deliverables:
   fixture classification/retention/replay decisions, resource ledgers,
   conformance-versus-corpus mode, freshness/clock-epoch mode, feature tier,
   documentation, and review expiry.
+- The same matrix links each closed request-header category and
+  canonical/cache/`Vary` decision, attempt-brand witness chain, and official
+  corpus retention expiry/purge rule.
 - Explicit unsupported and deferred inventory, including archive formats,
   dependencies, FFI, concrete network adapters, and post-1.0 agencies.
 - Current contradiction tests and plan/metadata consistency report.
@@ -2140,6 +2243,9 @@ Deliverables:
 - Corpus inputs are explicitly `CorpusReplay`: they carry no current policy,
   conformance, provenance, cache, checkpoint, or execution authority even when
   derived from a lawfully retained historical fixture.
+- Before every campaign, official-derived seeds revalidate retention
+  permission; expired or withdrawn bytes are purged/denied and only synthetic
+  or still-lawfully-retained inputs remain.
 - Extended mutation and out-of-process fuzz campaign with minimized
   regressions committed.
 - Resource-exhaustion, parser-agreement, and panic review.
@@ -2165,6 +2271,9 @@ Deliverables:
   attributes, character references, matching, and budgets.
 - Corpus inputs are explicitly non-authoritative `CorpusReplay`; historical
   fixture metadata cannot be upgraded into current conformance/provenance.
+- Before every campaign, official-derived XML/CSV seeds revalidate retention
+  permission; expired or withdrawn bytes are purged/denied and only synthetic
+  or still-lawfully-retained inputs remain.
 - When CSV was admitted at `v0.51.0`, corpora for each admitted dialect,
   quoting, line endings, encoding, formula-leading output, records, and
   budgets; otherwise recorded proof that no CSV target or claim exists.
@@ -2267,6 +2376,8 @@ Deliverables:
 
 - Fresh retrievals, hashes, reviewers, expiries, schema references, terms,
   attribution, retention, redistribution, and data-class decisions.
+- Revalidate every official-derived conformance fixture and corpus seed;
+  purge/deny bytes whose retention permission expired or was withdrawn.
 - Explicit confirmation or removal of each direct-use capability and continued
   hosted-service deferral.
 - Updated privacy, deletion, acceptable-use, support, and incident contacts.
@@ -2291,6 +2402,8 @@ Deliverables:
 
 - Rustdoc public-API snapshot, feature matrix, stable operation/object matrix,
   unsupported inventory, and SemVer report.
+- Frozen closed-header schemas and attempt-brand/finalization surface, with no
+  raw-header or unbranded-witness compatibility escape hatch.
 - Documentation/examples checked against the same generated metadata.
 - Confirmation that only Trafikverket is production agency scope for 1.0.
 - Change-control rule allowing only release-blocking fixes through 1.0.

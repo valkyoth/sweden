@@ -20,10 +20,14 @@ Rules:
 - `sweden-executor` owns generic execution only. Synthetic operation,
   encoder, decoder, validator, fixture, and output semantics live in the
   separate `sweden-conformance` crate.
-- `sweden-core` owns structural completion traits/status only.
-  `sweden-http` owns the opaque wire witness, each codec owns its own opaque
-  syntax witness, `sweden-registry` owns semantic-witness construction through
-  the bound validator, and `sweden-executor` alone owns finalization/provenance.
+- `sweden-core` owns canonical closed request-header categories and structural
+  completion/generative attempt vocabulary only; constructing a structural
+  attempt brand grants no execution or completion authority.
+- `sweden-http` owns the opaque attempt-branded wire witness, each codec owns
+  its own opaque attempt-branded syntax witness, `sweden-registry` owns branded
+  semantic-witness construction through the bound validator, and
+  `sweden-executor` establishes each higher-ranked attempt scope and alone
+  owns same-brand finalization/provenance.
 - Transport crates do not own agency semantics.
 - `lib.rs` and binary entry points remain orchestration.
 - Parsing, validation, policy, generated models, hand-written facades, tests,

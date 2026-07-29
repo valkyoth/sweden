@@ -31,12 +31,23 @@
 - structural completion vocabulary in core, with private producer-owned HTTP
   wire, codec-specific, registry-semantic, and executor-final witnesses before
   `Complete` provenance;
+- invariant per-attempt branding across every completion witness, with
+  concurrent same-operation substitution tests;
+- event-boundary-only pause, caller ownership of unconsumed input, bounded
+  already-charged decoder carry, next-chunk denial while paused, and exact-once
+  resume accounting;
 - archive traversal and decompression-ratio controls where applicable;
 - no-panic arbitrary input evidence.
 
 ## Required Before Network Execution
 
 - closed origin registry;
+- closed typed request headers with reviewed static, protected credential,
+  cache-validator, bounded dossier-permitted caller metadata, and
+  transport-owned framing categories; canonical case/duplicate rules,
+  CRLF/control rejection, hop-by-hop denial, and byte/count budgets;
+- representation-affecting headers included in canonical/cache identity or
+  reviewed `Vary`, with credentials/framing/diagnostics excluded;
 - HTTPS-only production policy;
 - reviewed redirect rules;
 - late credential injection;
@@ -46,6 +57,9 @@
   finalization;
 - non-downgradable compiled-expiry or current-authority freshness revalidated
   immediately before credentials/I/O and after waits, redirects, and pages;
+- explicit non-atomic revocation boundary between the final revalidation and
+  an external transport call; no atomicity claim without a controlled broker
+  or separately admitted authority-issued per-attempt grant;
 - registry-owned opaque freshness epochs and privately bound non-serializable
   authority observations; restart, reset/wrap, or mismatch re-observes or
   denies;
@@ -74,6 +88,8 @@
   mismatch;
 - type-distinct `ConformanceReplay` and untrusted `CorpusReplay`; corpus mode
   cannot authorize I/O, current provenance, caches, or checkpoints.
+- retention permission rechecked at corpus use, with expired or withdrawn
+  official bytes purged or denied even though corpus mode is non-authoritative.
 
 ## Required Before Hosted Multi-Tenancy
 
