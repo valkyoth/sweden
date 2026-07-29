@@ -14,6 +14,8 @@
   |
   <a href="https://github.com/valkyoth/sweden/blob/main/docs/threat-model.md">Threat Model</a>
   |
+  <a href="https://github.com/valkyoth/sweden/blob/main/rfc/README.md">RFC Baseline</a>
+  |
   <a href="https://github.com/valkyoth/sweden/blob/main/SECURITY.md">Security</a>
 </div>
 
@@ -164,6 +166,13 @@ Run the normal local gate:
 scripts/checks.sh
 ```
 
+Verify the locked local RFC reference baseline:
+
+```bash
+scripts/verify-rfcs.sh
+python3 scripts/test-rfc-sources.py
+```
+
 Run the networked freshness and release gate only when preparing a release:
 
 ```bash
@@ -195,6 +204,7 @@ scripts/release_crates.py --version 0.1.0 --require-tag
 - [Toolchain policy](https://github.com/valkyoth/sweden/blob/main/docs/toolchain-policy.md)
 - [Threat model](https://github.com/valkyoth/sweden/blob/main/docs/threat-model.md)
 - [Security controls](https://github.com/valkyoth/sweden/blob/main/docs/security-controls.md)
+- [Locked RFC reference baseline](https://github.com/valkyoth/sweden/blob/main/rfc/README.md)
 - [Supply-chain security](https://github.com/valkyoth/sweden/blob/main/docs/supply-chain-security.md)
 - [Unsafe policy](https://github.com/valkyoth/sweden/blob/main/docs/unsafe-policy.md)
 

@@ -1,0 +1,10 @@
+# number URL role
+2119 https://www.rfc-editor.org/rfc/rfc2119.txt normative-language
+3339 https://www.rfc-editor.org/rfc/rfc3339.txt internet-date-time
+3986 https://www.rfc-editor.org/rfc/rfc3986.txt uri-syntax
+6585 https://www.rfc-editor.org/rfc/rfc6585.txt additional-http-status
+8174 https://www.rfc-editor.org/rfc/rfc8174.txt normative-language
+8259 https://www.rfc-editor.org/rfc/rfc8259.txt json
+9110 https://www.rfc-editor.org/rfc/rfc9110.txt http-semantics
+9111 https://www.rfc-editor.org/rfc/rfc9111.txt http-caching
+9112 https://www.rfc-editor.org/rfc/rfc9112.txt http-11

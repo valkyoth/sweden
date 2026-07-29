@@ -5,6 +5,12 @@ Semantic Versioning for each independently published crate.
 
 ## Unreleased
 
+### Added
+
+- Locked, checksum-verified RFC Editor references for the normative-language,
+  Internet date/time, URI, HTTP status, JSON, HTTP semantics, caching, and
+  HTTP/1.1 standards used by Sweden's planned source-neutral contracts.
+
 ## 0.1.0 - 2026-07-28
 
 ### Added
