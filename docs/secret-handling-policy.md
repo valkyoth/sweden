@@ -33,9 +33,13 @@ Before credential support is added:
 - cache lookup/fill waits carry no secret lease; before returning protected
   cached data, the provider must revalidate non-secret access and the same
   `AccessPartitionId`, otherwise the candidate is discarded or access denied;
-- provider access rebinds must consume one finite non-secret restart ledger;
-  exhaustion discards the candidate and cannot recover an earlier binding,
-  partition, token, or cached value within that execution;
+- initial provider binding does not consume the finite non-secret rebind
+  ledger; every subsequent provider access assertion consumes exactly one unit
+  before provider access. Rebind exhaustion is `AccessUnstable`; after a
+  changed-partition assertion, parent cache-work exhaustion is
+  `CacheWorkExhausted`. Either failure discards the candidate and cannot
+  recover an earlier binding, partition, token, or cached value within that
+  execution;
 - fixture and replay tooling must fail closed on protected headers;
 - every secret-bearing error and debug path needs snapshot tests;
 - hosted credentials must be tenant-scoped and encrypted outside the SDK.

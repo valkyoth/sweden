@@ -144,7 +144,7 @@ Status: foundation model extended for the planned registry/executor boundary
   protected cached return.
 - Provider-driven changed-partition/restart state through one
   `AccessRebindLedger` and the original parent `CacheLookupWork` to bounded
-  relookup or closed `AccessUnstable`.
+  relookup or closed ordered `AccessUnstable`/`CacheWorkExhausted` failure.
 - Provider/registry-derived access binding through bounded cache lookup,
   current hit permission, and store replacement/purge.
 - Retained authorization to immediate policy freshness revalidation.
@@ -216,10 +216,13 @@ Status: foundation model extended for the planned registry/executor boundary
   revalidates current provider access, requires the same partition, and
   restarts lookup or denies on change/unavailability.
 - Registry-bound `AccessRebindLimit` becomes one executor-owned non-cloneable
-  ledger. Provider access reselection pre-charges it and repeated lookup
-  pre-charges the unchanged parent cache-work ledger; expiry, epoch churn,
-  restart, fill/`304` waits, and `CacheOnly` cannot replenish either.
-  Exhaustion discards the candidate as `AccessUnstable` and never falls back.
+  ledger. Initial binding is uncharged; every later provider assertion
+  pre-charges one rebind unit before provider access, and a changed-partition
+  result then pre-charges the unchanged parent cache-work ledger. Unavailable
+  rebind capacity is `AccessUnstable`; unavailable work after a changed result
+  is `CacheWorkExhausted`. Expiry, epoch churn, restart, fill/`304` waits, and
+  `CacheOnly` cannot replenish either. Both failures discard the candidate and
+  never fall back.
 - Explicit `NoCache` plus blocking/async store contracts bound candidate count
   and comparison work, require atomic complete replacement/purge and safe
   errors, and leave permission/identity decisions in the executor.
@@ -331,7 +334,9 @@ Status: foundation model extended for the planned registry/executor boundary
   generations, binding/entitlement, retain secret material/tokens, or stall
   forever; traits do not sandbox either.
 - A malicious provider can deliberately exhaust the finite rebind/cache-work
-  ledgers and deny service, but cannot make Sweden loop without those
+  ledgers and deny service, but deterministic charge ordering exposes
+  `AccessUnstable` before provider access or `CacheWorkExhausted` after a
+  changed-partition assertion; it cannot make Sweden loop without those
   consumable bounds or authorize fallback to a prior partition.
 - `BodyWireBytes` excludes TLS, HTTP transfer/framing, headers,
   retransmissions, and other network overhead; actual bandwidth enforcement

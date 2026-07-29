@@ -91,10 +91,14 @@
   proceed, changed entitlement restarts lookup, and provider unavailability
   denies protected cached data;
 - registry-bound finite `AccessRebindLimit` and non-cloneable
-  `AccessRebindLedger`, pre-charged before every provider access reselection;
-  changed-partition lookup consumes the same parent cache-work ledger;
-- `AccessUnstable` on exhaustion with candidate discard and no fallback to an
-  earlier partition, entry, or fresh ledger within that execution; A/B
+  `AccessRebindLedger`; initial provider binding consumes no rebind unit, while
+  every subsequent assertion pre-charges exactly one before provider access;
+  changed-partition lookup then consumes the same parent cache-work ledger;
+- deterministic exhaustion precedence: unavailable rebind capacity returns
+  `AccessUnstable` before invoking the provider, while unavailable parent
+  lookup work after a changed assertion returns `CacheWorkExhausted`;
+  both discard the candidate with no fallback to an earlier partition, entry,
+  or fresh ledger within that execution; A/B
   oscillation, repeated expiry, epoch churn, provider restart, fill waits,
   `304`, and `CacheOnly` all share the same limit;
 - explicit `NoCache` default plus blocking/async cache-store boundary with

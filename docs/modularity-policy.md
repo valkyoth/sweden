@@ -36,6 +36,12 @@ Rules:
   revisioned fill publication, quota scope, late one-use secret
   materialization, registered response outcomes, and successful final
   provenance.
+- Initial provider binding is an executor-owned establishment step and does not
+  charge `AccessRebindLedger`. Every later provider assertion pre-charges it
+  before provider access; a changed-partition result then pre-charges the
+  unchanged parent cache-work ledger. The executor alone fixes the resulting
+  `AccessUnstable`-before-access and `CacheWorkExhausted`-after-change
+  precedence.
 - `sweden-core` owns canonical closed request-header categories and structural
   completion/generative attempt vocabulary plus generic non-cloneable restart
   ledger mechanics only; it does not choose access-rebind policy, and

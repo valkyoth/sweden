@@ -411,6 +411,10 @@ Deliverables:
   classification, `DataHandlingProfile`, and reviewed `AccessRebindLimit`.
   Quota and access partition types are not interchangeable, and callers cannot
   replace the limit or supply a pre-filled restart ledger.
+- Reserve closed `AccessUnstable` and `CacheWorkExhausted` outcomes for the
+  executor's ordered access-rebind/relookup transitions: initial binding is
+  uncharged, later provider assertions charge rebind capacity first, and only
+  a successfully changed partition may next charge parent cache work.
 - Minimal dependency-free non-secret cache entry/identity/lookup vocabulary,
   global anonymous access-partition construction, bounded collision-candidate
   and comparison-work limits, safe store codes, and `NoCache` marker for the
@@ -1024,15 +1028,21 @@ Deliverables:
   path; untrusted persisted bytes cannot become a hit or `304` base, and
   duplicate exact matches fail closed.
 - Before any credential-partitioned cache hit, fill-waiter result, or `304`
-  return, pre-charge the registry-bound `AccessRebindLedger`, consume the
-  earlier binding, and obtain a fresh provider access assertion.
+  return, pre-charge exactly one unit from the registry-bound
+  `AccessRebindLedger`, consume the earlier binding, and obtain a fresh
+  provider access assertion. Selecting the initial non-secret binding does not
+  consume this ledger.
   `AccessRevalidated<R>` is constructed only for a current
   epoch/generation/expiry and the identical `AccessPartitionId`; changed
   partition discards the candidate and pre-charges repeated lookup against the
-  same parent `CacheLookupWork`. Neither ledger is recreated or refunded.
-  Exhaustion returns closed `AccessUnstable` with no earlier-partition/
-  candidate fallback, while provider unavailability fails closed. Anonymous
-  global cache data uses the registry-owned assertion through the same state.
+  same parent `CacheLookupWork`. If the rebind pre-charge is unavailable,
+  return `AccessUnstable` before invoking the provider. If a successful
+  assertion changes partition but parent lookup work is unavailable, return
+  `CacheWorkExhausted`. This transition order is the deterministic error
+  precedence when both capacities are exhausted. Neither ledger is recreated
+  or refunded, and neither failure permits earlier-partition/candidate
+  fallback. Provider unavailability fails closed. Anonymous global cache data
+  uses the registry-owned assertion through the same state.
 - The same rebind ledger spans immediate hits, fill waits, repeated expiry/
   epoch/provider-restart cycles, `304`, and `CacheOnly`; the total deadline is
   defense in depth rather than the sole fast-loop bound.
@@ -1111,7 +1121,9 @@ Verification:
   revalidation, cache-wait binding expiry/revocation/generation change/
   provider restart/unavailability, A/B partition oscillation, repeated expiry/
   epoch churn, changed-partition lookup restart, rebind exact-limit/one-over,
-  parent-cache-ledger continuity, `AccessUnstable` no-fallback, `CacheOnly`,
+  uncharged initial binding, parent-cache-ledger continuity, simultaneous
+  exhaustion with `AccessUnstable` before provider access and
+  `CacheWorkExhausted` only after partition change, no-fallback, `CacheOnly`,
   forged cache trust, restart/epoch mismatch, future cache time, duplicate
   exact candidates, phase-specific deadline/cancellation cleanup,
   reservation cancellation, double release, pre-handoff versus ambiguous
@@ -1196,9 +1208,11 @@ Deliverables:
   lookup under the new partition; expiry, revocation, epoch mismatch, restart,
   or provider unavailability denies cached return.
 - Trafikverket's generated registry entry fixes a finite
-  `AccessRebindLimit`. Provider reselection and changed-partition relookup
-  consume the executor's one shared restart/cache-work ledgers in every cache
-  mode; `AccessUnstable` cannot revive an earlier entry.
+  `AccessRebindLimit`. Initial binding is uncharged; every later provider
+  assertion consumes the executor's one shared rebind ledger before provider
+  access, and a changed-partition result then consumes the unchanged parent
+  cache-work ledger in every cache mode. `AccessUnstable` and
+  `CacheWorkExhausted` cannot revive an earlier entry.
 - Separate one-use `SecretLease` materialization validates the binding after
   quota wait and immediately before injection; expiry/revocation/generation or
   partition change restarts selection without sending.
@@ -1216,8 +1230,10 @@ Verification:
   changed-entitlement rotation, queued binding expiry, provider revocation,
   binding epoch/generation ABA, consumed-token replay, cache-wait access
   revalidation/unavailability, changed-partition lookup restart, A/B
-  oscillation, repeated expiry/epoch/restart, `AccessUnstable` no-fallback,
-  secret-lease mismatch, and secret-derived-partition denial.
+  oscillation, repeated expiry/epoch/restart, initial-bind and subsequent-
+  assertion accounting, deterministic `AccessUnstable`/`CacheWorkExhausted`
+  precedence and no-fallback, secret-lease mismatch, and
+  secret-derived-partition denial.
 
 Exit criteria:
 
@@ -1695,11 +1711,14 @@ Deliverables:
   entitlement invalidates the old assertion. A fresh assertion at a newer
   generation may proceed only for the same access partition; a new partition
   restarts bounded lookup.
-- Every provider access revalidation/reselection pre-charges one shared
-  `AccessRebindLedger`; every changed-partition relookup also charges the
-  original parent cache-work ledger. No hit, fill waiter, `304`, or
-  `CacheOnly` branch creates fresh capacity. Exhaustion is `AccessUnstable`,
-  discards the candidate, and never falls back to a prior partition.
+- Initial provider binding consumes no `AccessRebindLedger` unit. Every later
+  provider access revalidation/reselection pre-charges exactly one shared unit
+  before provider access; unavailable capacity is `AccessUnstable`. A
+  successful changed-partition assertion then charges the original parent
+  cache-work ledger; unavailable work is `CacheWorkExhausted`. This ordering
+  fixes precedence even when both are exhausted. No hit, fill waiter, `304`,
+  or `CacheOnly` branch creates fresh capacity, and either failure discards
+  the candidate without fallback to a prior partition.
 - Representation-affecting request headers are exact canonical-key or reviewed
   `Vary` dimensions, while credentials, framing, diagnostics, and validator
   values are excluded from the base key.
@@ -1743,9 +1762,12 @@ Verification:
   process skew, binding expiry/revocation/generation/epoch/provider restart
   during every cache wait and `304`, A/B partition oscillation, rapid provider
   restart, repeated expiry/epoch churn, changed-partition restart,
-  `AccessUnstable` exact-limit/one-over/no-fallback, parent-ledger preservation,
-  `CacheOnly`, concurrent-`304` revision races, partial replacement, purge
-  failure, store safe-error collapse, and blocking/async parity.
+  initial-bind-free and subsequent-assertion exact accounting,
+  `AccessUnstable` exact-limit/one-over/no-fallback,
+  `CacheWorkExhausted` after a changed assertion, dual-exhaustion precedence
+  without a provider call, parent-ledger preservation, `CacheOnly`,
+  concurrent-`304` revision races, partial replacement, purge failure, store
+  safe-error collapse, and blocking/async parity.
 
 Exit criteria:
 
@@ -1955,7 +1977,10 @@ Deliverables:
   provider access before protected returns, preserves one parent cache-work
   ledger and executor-owned `AccessRebindLedger` across every restart, derives
   complete fill identity, owns fenced revisioned publication, and exposes
-  storage only through explicit blocking/async/`NoCache` contracts.
+  storage only through explicit blocking/async/`NoCache` contracts. The audit
+  fixes initial binding at zero rebind charges, every later assertion at one
+  pre-charge, and changed-partition relookup at one later parent-work charge
+  with deterministic `AccessUnstable`/`CacheWorkExhausted` precedence.
 - Compile-fail boundaries proving the facade contains wiring only, agency
   crates do not depend on HTTP/executor, and callers cannot construct
   authorized states.
@@ -1970,7 +1995,9 @@ Verification:
   substitution, every status-outcome substitution, forged/changed quota
   partition, forged/merged/cross-credential access partition, shared-store
   collision amplification, skipped cache/access revalidation, partial fill
-  identity, rebind-ledger replacement/refund/bypass, unfenced/stale/
+  identity, initial-bind overcharge, later-assertion undercharge,
+  dual-ledger exhaustion/error-order mismatch, rebind-ledger
+  replacement/refund/bypass, unfenced/stale/
   revision-bypassing publication, binding/secret phase reorder,
   double-execution, cancellation, and blocking/async equivalence tests.
 
@@ -2005,8 +2032,10 @@ Deliverables:
   Changed entitlement restarts bounded lookup; expiry, revocation, restart, or
   provider unavailability denies the protected cached return.
 - Audit the finite registry-bound `AccessRebindLimit`, executor-private ledger,
-  unchanged parent cache-work ledger, pre-charge ordering, `AccessUnstable`
-  no-fallback result, and identical behavior in `CacheOnly`.
+  unchanged parent cache-work ledger, uncharged initial binding, exact
+  one-unit charge before each later provider assertion, and the ordered
+  `AccessUnstable`-before-provider/`CacheWorkExhausted`-after-partition-change
+  results with no fallback and identical behavior in `CacheOnly`.
 - After quota wait and final policy check, a one-use `SecretLease` must attest
   the exact binding and is injected immediately without persistence or retry
   reuse.
@@ -2030,10 +2059,11 @@ Verification:
   aliases, forged/cross-type IDs, binding epoch reset/wrap/replay, token reuse,
   cache-wait provider restart/unavailability, changed-partition lookup restart,
   A/B oscillation, repeated expiry/epoch churn, rebind exact-limit/one-over,
-  parent-ledger replacement/refund attempts, `AccessUnstable` fallback denial,
-  generation mismatch, late materialization/injection failure, partition
-  explosion, secret residence/lifetime, and multiple-client quota/access
-  continuity.
+  initial-bind-free/subsequent-assertion accounting, parent-ledger
+  replacement/refund attempts, dual-exhaustion error precedence,
+  `AccessUnstable`/`CacheWorkExhausted` fallback denial, generation mismatch,
+  late materialization/injection failure, partition explosion, secret
+  residence/lifetime, and multiple-client quota/access continuity.
 
 Exit criteria:
 
@@ -2201,8 +2231,10 @@ Deliverables:
   ownership, cache-validator insertion, body-wire versus network-byte claims,
   data-access partition isolation, explicit cache-store boundary/collision
   work, provider-session binding epochs/one-use tokens/post-wait access
-  revalidation and bounded rebind/relookup ledgers, full fill identity/fenced
-  revisioned publication, two-phase credential binding/secret materialization,
+  revalidation and bounded rebind/relookup ledgers including initial-bind
+  accounting and deterministic dual-exhaustion precedence, full fill
+  identity/fenced revisioned publication, two-phase credential binding/secret
+  materialization,
   XML work/progress, executable data handling,
   conformance-versus-corpus replay, fixture retention expiry, supply-chain,
   and release reviews.
@@ -2270,9 +2302,13 @@ Deliverables:
   owned/encoded cache bytes, key/validator bytes, access-partition
   cardinality, eviction/purge/expired-entry cleanup, and checkpoints.
 - Include provider binding/access revalidation and restart cycles:
-  `AccessRebindLedger` is charged before provider reselection, repeated lookup
-  consumes the unchanged parent `CacheLookupWork`, and neither capacity can be
-  refunded or replaced by a new ledger.
+  initial binding does not charge `AccessRebindLedger`; each subsequent
+  provider access assertion charges exactly one unit before provider access,
+  and repeated lookup after a changed assertion consumes the unchanged parent
+  `CacheLookupWork`. Neither capacity can be refunded or replaced by a new
+  ledger. Rebind failure is `AccessUnstable` before the provider call;
+  later lookup-work failure is `CacheWorkExhausted`, including when both
+  ledgers started the transition exhausted.
 - Conforming cache stores declare those capacities and return stable
   `StoreFull`; provider-driven authoritative/local partition explosion fails
   before unbounded allocation. All eviction, purge, and cleanup scans consume
@@ -2316,8 +2352,10 @@ Verification:
   boundaries, byte/key/validator/partition cardinality, bounded
   eviction/purge/cleanup, insertion-versus-required-purge failure, binding
   epoch/access-reselection/token consumption, A/B partition oscillation,
-  rebind exact-limit/one-over, parent cache-work continuity, no-fallback
-  `AccessUnstable`, stale-fence/revision-race/duplicate-publication/
+  initial-bind zero-use, later-assertion exact-limit/one-over, parent
+  cache-work continuity, dual-exhaustion precedence, no-fallback
+  `AccessUnstable`/`CacheWorkExhausted`,
+  stale-fence/revision-race/duplicate-publication/
   cancel-after-response accounting, binding restart/secret-lease lifetime,
   and lying-adapter accounting cases.
 
@@ -2387,7 +2425,11 @@ Verification:
 - Fast malicious provider doubles alternating A/B access partitions, expiring
   every assertion, churning epochs, or repeatedly reporting restart; each is
   bounded by `AccessRebindLedger` before the total deadline and cannot obtain a
-  fresh parent cache-work ledger or fallback candidate.
+  fresh parent cache-work ledger or fallback candidate. Doubles also prove the
+  initial selection is uncharged, every later assertion is charged before the
+  provider is invoked, and simultaneous exhaustion reports `AccessUnstable`
+  without attempting the provider; `CacheWorkExhausted` is reachable only
+  after a successful changed-partition assertion.
 - Cache stores that return excess/colliding candidates, partial entries,
   duplicate exact matches, cross-access data, stale handling metadata,
   forged trust/epoch/expiry, future timestamps, capacity lies, accept a stale
@@ -2708,6 +2750,10 @@ Deliverables:
   expiry, or epoch churn starts only a caller-authorized new execution with
   fresh top-level limits; the failed execution cannot revive an old partition,
   candidate, or ledger.
+- Recovery from `CacheWorkExhausted` after a successful changed-partition
+  assertion follows the same new-execution boundary. It cannot reinterpret
+  the failure as `AccessUnstable`, call the provider again, or reuse the
+  discarded candidate.
 - Expired-leader late publication, leader/takeover and concurrent-`304` races,
   store restart between fill and publication, stale entry revision, and
   idempotent retry recovery without accepting an old fence.
@@ -2722,7 +2768,9 @@ Verification:
   fill-leader takeover/late write, publication/store restart, concurrent
   revision changes, provider restart/binding ABA, entitlement change, access
   revalidation outage, A/B oscillation, rapid expiry/epoch churn,
-  `AccessUnstable` no-fallback, parent-ledger continuity, and capacity recovery.
+  initial-bind/later-assertion accounting, simultaneous-exhaustion precedence,
+  `AccessUnstable`/`CacheWorkExhausted` no-fallback, parent-ledger continuity,
+  and capacity recovery.
 
 Exit criteria:
 
@@ -2800,7 +2848,10 @@ Deliverables:
 - Seeded multi-process provider oscillation/restart/expiry storms prove each
   execution retains one parent cache-work ledger and one finite
   `AccessRebindLedger`; coordinated topology cannot multiply restart capacity
-  through clients, processes, `CacheOnly`, or fill waiters.
+  through clients, processes, `CacheOnly`, or fill waiters. Initial selection
+  remains uncharged, each later assertion charges once before provider access,
+  and every topology preserves the same `AccessUnstable` then
+  `CacheWorkExhausted` transition precedence.
 - Full `CacheFillIdentity` prevents cross-namespace/environment/origin/version/
   handling/representation/transform coalescing. Coordinated monotonic fences,
   entry-revision CAS, expired-leader takeover, late publication, idempotent
@@ -2826,8 +2877,9 @@ Verification:
   including partition-explosion, rotation/alias/entitlement storms,
   cross-access shared-store attempts, queued-binding expiry, provider-session
   ABA, access-partition oscillation, restart-ledger multiplication attempts,
-  partial fill identity, stale publication fence/revision, and expired-leader/
-  store-restart races.
+  initial-bind/subsequent-assertion accounting, simultaneous ledger
+  exhaustion and stable error order, partial fill identity, stale publication
+  fence/revision, and expired-leader/store-restart races.
 
 Exit criteria:
 
@@ -3021,9 +3073,10 @@ Deliverables:
 - Frozen `DataAccessScope`/`AccessPartitionId`, cache-store/`NoCache` generic
   and state transitions, `AccessRevalidated<R>`, provider-session binding
   epoch/one-use token, `AccessRebindLimit`/`AccessRebindLedger`/
-  `AccessUnstable`, `CacheFillIdentity`, publication fence/entry revision,
-  credential-binding/`SecretLease` phases, `DataHandlingProfile`, and XML
-  work/progress contracts.
+  `AccessUnstable`/`CacheWorkExhausted`, uncharged-initial/charged-subsequent
+  assertion and error-precedence rules, `CacheFillIdentity`, publication
+  fence/entry revision, credential-binding/`SecretLease` phases,
+  `DataHandlingProfile`, and XML work/progress contracts.
 - Documentation/examples checked against the same generated metadata.
 - Confirmation that only Trafikverket is production agency scope for 1.0.
 - Change-control rule allowing only release-blocking fixes through 1.0.
