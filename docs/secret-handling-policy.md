@@ -13,11 +13,16 @@ Before credential support is added:
   panic messages must exclude secret material;
 - query-string credentials require a separate uncredentialed representation;
 - test and production credentials must be separate types or environments;
-- credential-pool quota identity must be an opaque provider value coupled to
-  credential selection, stable across shared-pool rotation/aliases, and never
-  derived by hashing or otherwise transforming raw secret bytes;
-- credential partition IDs must not be logged or accepted from callers even
-  though they contain no secret bytes;
+- credential binding must contain no secret bytes: only an opaque provider
+  token, quota/access partitions, generation, and expiry;
+- credential-pool quota identity must remain stable across shared-pool
+  rotation/aliases, while access identity remains stable only when entitlement
+  is unchanged; neither may derive from raw secret bytes;
+- quota/access partition IDs and binding tokens must not be logged or accepted
+  from callers even though they contain no secret bytes;
+- after cache miss/quota admission/final policy check, a one-use `SecretLease`
+  must match the binding, be injected immediately, and never be cached or
+  retained for retry;
 - fixture and replay tooling must fail closed on protected headers;
 - every secret-bearing error and debug path needs snapshot tests;
 - hosted credentials must be tenant-scoped and encrypted outside the SDK.

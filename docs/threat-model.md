@@ -20,10 +20,18 @@ Status: foundation model extended for the planned registry/executor boundary
   dispatch and the exact prior finalized cache identity required by `304`.
 - Dossier-generated quota scope, provider-owned opaque credential-pool
   identity, and continuity across shared-pool rotation/aliases.
+- Dossier-generated data-access scope, authoritative entitlement partition,
+  cache identity/store isolation, and bounded collision-candidate work.
+- Non-secret credential binding identity/generation/expiry and matching
+  short-lived one-use secret materialization.
+- Registry-bound executable data-handling profile preserved in finalized
+  provenance.
+- XML computational-work ledger and parser progress.
 - Honest meaning of adapter-delivered body-wire bytes and normalized response
   metadata.
-- Freshness requirements and the ordering of policy revalidation, quota
-  reservation/commit, credential injection, and transport handoff.
+- Freshness requirements and the ordering of policy revalidation, non-secret
+  binding, cache resolution, quota reservation, late secret/injection,
+  commit, and transport handoff.
 - Non-serializable current-authority observations and their originating
   monotonic clock/session epoch.
 - Integrity and provenance of official data.
@@ -41,7 +49,7 @@ Status: foundation model extended for the planned registry/executor boundary
   reusing authorization after consumption.
 - A caller retaining valid authorization until after expiry/revocation,
   downgrading its freshness requirement, or skipping/reordering time-of-use
-  policy, quota, credential, and attempt states.
+  policy, binding, cache, quota, secret, injection, and attempt states.
 - A downstream crate forging a completion witness, substituting JSON/XML or
   cross-execution witnesses—including valid witnesses from concurrent
   same-operation attempts—or bypassing the registry-owned validator.
@@ -53,6 +61,13 @@ Status: foundation model extended for the planned registry/executor boundary
 - A caller forging or multiplying quota partitions through new clients,
   operations, cache partitions, credential rotation/aliases, or secret-derived
   keys.
+- A caller/store forging, merging, or substituting data-access partitions,
+  sharing private entries across credentials, or amplifying cache collision
+  work through poor hashes/excess candidates.
+- A provider expiring, revoking, rotating, or changing identity between
+  non-secret binding and secret materialization, or retaining a secret lease.
+- XML engineered for quadratic namespace/QName/attribute/end-tag/reference
+  work or unchanged-state spin despite finite byte limits.
 - A compromised, malicious, or unexpectedly changed upstream service.
 - An attacker attempting SSRF or credential exfiltration through redirects,
   origins, proxy settings, errors, fixtures, or logs.
@@ -70,6 +85,8 @@ Status: foundation model extended for the planned registry/executor boundary
   or under-reporting body/network bytes.
 - A caller treating provisional streaming events as committed before final
   envelope validation.
+- A caller copying, logging, retaining, transforming, or redistributing
+  decoded data after it crosses the SDK boundary.
 - A cursor-cycle attacker relying on hash collisions or exhausting bounded
   history so paging repeats indefinitely.
 - A recorder or replay consumer attempting to retain protected official data,
@@ -92,12 +109,16 @@ Status: foundation model extended for the planned registry/executor boundary
   protected-slot filling, and transport-owned framing to wire handoff.
 - Selected cache entry through executor-only validator insertion and exact
   `304` revalidation.
+- Provider/registry-derived access binding through bounded cache lookup,
+  current hit permission, and store replacement/purge.
 - Retained authorization to immediate policy freshness revalidation.
 - Policy-revalidated execution to late quota reservation, credentials,
   authority-local attempt commit, the crash gap, and caller transport
   invocation.
 - Credential selection and opaque provider pool identity to registry-generated
   quota scope and coordinated authority admission.
+- Non-secret provider binding through cache/quota wait and final revalidation
+  to matching one-use `SecretLease` and immediate injection.
 - Executor request plan to caller-supplied transport.
 - Closed origin selection to late credential injection.
 - Upstream bytes to bounded codec.
@@ -113,6 +134,8 @@ Status: foundation model extended for the planned registry/executor boundary
   continue/pause/stop/abort decision.
 - Raw source data to normalized or transformed data.
 - Source result to cache and hosted response.
+- Registry-bound data-handling profile to every Sweden-owned cache, fixture,
+  transform/export, retention/purge, diagnostic, and sensitive-field path.
 - Tenant context to credentials, limiter, cache, and audit storage.
 - Official schema/terms input to checked-in reviewed snapshot.
 - Cargo tools and GitHub Actions to release evidence.
@@ -144,6 +167,12 @@ Status: foundation model extended for the planned registry/executor boundary
   late, stay outside its base key, and bind exact partition, versions, and
   reviewed `Vary`; `304` revalidates current cache permission and prior
   `Finalized<R>` instead of minting semantic completion.
+- `DataAccessScope` is distinct from quota: anonymous public partitions are
+  registry-owned, credentialed partitions are provider entitlement IDs,
+  local namespaces only narrow, and changed entitlement changes partition.
+- Explicit `NoCache` plus blocking/async store contracts bound candidate count
+  and comparison work, require atomic complete replacement/purge and safe
+  errors, and leave permission/identity decisions in the executor.
 - Closed `CompiledUntil`/`CurrentAuthorityRequired` freshness modes rechecked
   immediately before credentials/I/O and after waits, redirects, and page
   transitions; callers can tighten but never downgrade them.
@@ -162,6 +191,10 @@ Status: foundation model extended for the planned registry/executor boundary
   partitions. Provider-owned opaque pool IDs remain stable across rotations
   and aliases sharing upstream capacity, secrets are never key material, and
   source/deployment/IP or other cross-client scope requires coordination.
+- Credential binding contains no secret bytes. After cache miss/quota wait,
+  final policy revalidation precedes a matching generation/partition/expiry
+  checked one-use secret lease and immediate injection; mismatch cancels and
+  restarts without sending.
 - Official network execution prohibited through `v0.36.0`; full reviewed
   rate/window/concurrency enforcement is required beginning at `v0.37.0`.
 - Separate synthetic `sweden-conformance` source rather than test semantics in
@@ -179,6 +212,9 @@ Status: foundation model extended for the planned registry/executor boundary
 - Borrowed events cannot escape synchronous visitor callbacks. Closed
   continue/pause/stop/abort results preserve provisional state correctly, and
   only exact producer witnesses can create `Complete` provenance.
+- XML work is pre-charged for namespace traversal, QName/common-prefix/end-tag
+  comparison, duplicate expanded attributes, and references; each parser step
+  consumes, emits, needs input, or exhausts a ledger.
 - Fixture recording is synthetic-only by default. Official public fixtures
   require explicit retention and redistribution evidence; personal/sensitive
   recording fails closed and replay revalidates bound evidence.
@@ -186,6 +222,9 @@ Status: foundation model extended for the planned registry/executor boundary
   untrusted bytes only and cannot authorize I/O, provenance, cache, or
   checkpoint state. Corpus use still revalidates retention and purges or denies
   official bytes after permission expiry/withdrawal.
+- `DataHandlingProfile` is carried by authorization/finalized provenance and
+  consumed by all Sweden-owned cache/fixture/transform/export/retention/
+  diagnostic paths; unknown or contradictory handling fails closed.
 - Paging stores exact bounded cursor identities and stops when history
   capacity is insufficient; hashes never decide equality.
 - Payload-free logging by default.
@@ -211,6 +250,9 @@ Status: foundation model extended for the planned registry/executor boundary
   conservatively spends an unsent attempt.
 - Caller-provided quota, policy, credential, cache, and allocator
   implementations can invalidate guarantees assigned to those boundaries.
+- An arbitrary cache store may retain/cross/fabricate entries or ignore purge,
+  and an arbitrary credential provider may lie about binding/entitlement or
+  retain secret material; traits do not sandbox either.
 - `BodyWireBytes` excludes TLS, HTTP transfer/framing, headers,
   retransmissions, and other network overhead; actual bandwidth enforcement
   remains a transport/deployment guarantee, and arbitrary transports may lie
@@ -221,6 +263,8 @@ Status: foundation model extended for the planned registry/executor boundary
 - An offline old binary cannot learn a newly published revocation. Without a
   required trusted monotonic authority, only compiled expiry limits it.
 - Official data can contain malicious, misleading, or personal content.
+- Once decoded data is returned, Sweden cannot prevent caller code from
+  copying, logging, retaining, transforming, or redistributing it.
 - Compilation on a platform does not prove runtime networking behavior there.
 - Foundation tests do not establish production readiness.
 - Future hosted tenant threats remain documented but outside the pre-1.0 SDK

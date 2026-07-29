@@ -22,6 +22,8 @@
 - exact-consumption semantics;
 - malformed, truncated, oversized, and mutation tests;
 - DTD/entity rejection for XML;
+- `XmlWork` charging for namespace/QName/attribute/end-tag/reference work and
+  a consume/event/need-input/exhaust progress invariant;
 - decoded-name duplicate detection for JSON and explicit XML 1.0 lexical,
   QName, namespace, comment, CDATA, processing-instruction, declaration, and
   reference-digit budgets;
@@ -54,7 +56,8 @@
   reviewed `Vary`, with credentials/framing/diagnostics excluded;
 - cache validators derived only from the selected cache entry, inserted late
   by executor logic, excluded from the base key, and bound to exact cache
-  partition, validator, policy/schema/registry, and `Vary` identity;
+  access partition/local narrowing, validator, policy/schema/registry,
+  classification/handling profile, and `Vary` identity;
 - HTTPS-only production policy;
 - reviewed redirect rules;
 - late credential injection;
@@ -70,12 +73,23 @@
 - registry-owned opaque freshness epochs and privately bound non-serializable
   authority observations; restart, reset/wrap, or mismatch re-observes or
   denies;
-- distinct authorization, policy-revalidated, quota-reserved,
-  credential-selected, quota-reserved, credential-injected,
+- distinct authorized, policy-revalidated, non-secret
+  credential/access-binding-selected, cache-resolved, quota-reserved,
+  final-policy-revalidated, one-use-secret-materialized, credential-injected,
   attempt-committed, and attempt-in-flight states;
 - dossier-generated `QuotaScope` with no caller-created production partition;
   opaque provider pool IDs remain stable across shared-pool rotation/aliases,
   never derive from secrets, and cross-client scopes require coordination;
+- dossier-generated `DataAccessScope` with registry-global anonymous or
+  provider-owned entitlement partitions distinct from quota; caller
+  namespaces only narrow and entitlement-changing rotation changes partition;
+- explicit `NoCache` default plus blocking/async cache-store boundary with
+  bounded collision candidates/comparison work, atomic replacement/purge,
+  safe errors, and current permission/access/classification revalidation on
+  fresh, stale, cache-only, miss, and `304`;
+- non-secret provider binding before cache/quota and matching short-lived
+  one-use `SecretLease` only after quota wait/final policy check; expiry,
+  revocation, generation, or partition mismatch cancels and restarts;
 - authority-local quota commit before the external transport call, with the
   intervening crash gap conservatively spending the attempt;
 - explicit deadline mode, retries, and rate budgets without claiming a clock
@@ -101,6 +115,8 @@
 - fail-closed rejection of personal or sensitive body recording;
 - source, operation, schema, policy/evidence, retrieval, classification, and
   redistribution metadata;
+- registry-bound `DataHandlingProfile` enforcement for cache, recording,
+  transform/export, retention/purge, and sensitive-field diagnostics;
 - `ConformanceReplay` rejection after expiry or any operation/evidence
   mismatch;
 - type-distinct `ConformanceReplay` and untrusted `CorpusReplay`; corpus mode

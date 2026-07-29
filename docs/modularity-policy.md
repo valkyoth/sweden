@@ -11,22 +11,25 @@ Rules:
   core, policy, and codec crates they need; they do not depend on the facade,
   registry, executor, HTTP, or one another.
 - `sweden-policy` owns source-independent policy algorithms and contracts,
-  including closed response-outcome and quota-scope vocabulary, never
-  generated agency/source membership or production partition identity.
+  including closed response-outcome, quota/data-access scope, and
+  data-handling vocabulary, never generated agency/source membership or
+  production partition identity.
 - `sweden-registry` owns generated source-specific entries and may depend
   one-way on a selected agency or conformance crate behind a matching feature;
   source crates never depend back on the registry.
 - `sweden-registry` also owns opaque freshness epochs and privately binds
   caller-authority state into non-serializable epoch-specific observations.
 - `sweden-registry` binds each operation's exact status/outcome profile and
-  generated `QuotaScope`; callers cannot replace either with a generic status
-  handler or free-form production partition.
+  generated `QuotaScope`, `DataAccessScope`, global anonymous/provider
+  partition recipe, and `DataHandlingProfile`; callers cannot replace them
+  with generic handlers or free-form production partitions.
 - `sweden-executor` owns generic execution only. Synthetic operation,
   encoder, decoder, validator, fixture, and output semantics live in the
   separate `sweden-conformance` crate.
-- `sweden-executor` alone selects credentials/opaque pool identity, inserts
-  cache validators, resolves quota scope, dispatches registered response
-  outcomes, and creates successful final provenance.
+- `sweden-executor` alone orchestrates non-secret credential/access binding,
+  explicit blocking/async/`NoCache` store contracts, bounded cache lookup,
+  validator insertion, quota scope, late one-use secret materialization,
+  registered response outcomes, and successful final provenance.
 - `sweden-core` owns canonical closed request-header categories and structural
   completion/generative attempt vocabulary only; constructing a structural
   attempt brand grants no execution or completion authority.
@@ -38,6 +41,11 @@ Rules:
 - `sweden-http` defines normalized response metadata and adapter-delivered
   `BodyWireBytes`; it does not claim TLS/HTTP framing or total network
   bandwidth ownership.
+- Credential providers own opaque binding tokens, quota/access partition IDs,
+  generations/expiries, and one-use `SecretLease` materialization; cache stores
+  own storage mechanics only and cannot decide access or handling policy.
+- Agency crates own generated field sensitivity/handling metadata but cannot
+  broaden the registry-bound operation profile.
 - Transport crates do not own agency semantics.
 - `lib.rs` and binary entry points remain orchestration.
 - Parsing, validation, policy, generated models, hand-written facades, tests,

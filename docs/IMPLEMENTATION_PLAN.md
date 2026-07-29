@@ -104,6 +104,25 @@ its established scope or gates:
   coordinated deployment/IP, credential-pool, operation, or an explicitly
   reviewed combination, and credential-pool identity comes opaquely from the
   credential provider without hashing secret bytes;
+- accepted: data-entitlement/cache isolation is independent of quota pooling;
+  a dossier-generated `DataAccessScope` resolves to an authority-derived
+  opaque `AccessPartitionId`, with a registry-owned public partition for
+  anonymous public data and a provider-owned entitlement partition for
+  credentialed data. Caller namespaces may narrow but never merge partitions;
+- accepted: non-secret credential/access binding and secret materialization
+  are separate;
+  `CredentialBindingSelected<R>` contains only an opaque provider token,
+  quota/access partitions, generation, and expiry. A matching one-use
+  `SecretLease` is materialized only after cache miss, quota admission, and
+  final policy revalidation, then injected immediately;
+- accepted: cache lookup is part of the executor state machine before quota or
+  network work. `sweden-executor` owns optional blocking/async `CacheStore`
+  contracts through an explicit `NoCache` default, while registry-bound
+  policy owns cache permission/identity and `v0.38.0` supplies full algorithms;
+- accepted: every cache path—fresh, stale-within, cache-only, miss, and
+  `304`—revalidates kill switch, cache permission, evidence/version,
+  `DataAccessScope`, `AccessPartitionId`, and data classification before
+  returning or reusing a value;
 - accepted: cache validators are derived only from the already-selected cache
   entry and inserted late by executor-owned cache logic; they are not caller
   input or part of the base cache key and remain bound to the exact partition,
@@ -135,6 +154,16 @@ its established scope or gates:
   their retention permission expires, while synthetic bytes remain eligible;
 - accepted: configured limits become checked ledgers charged before I/O,
   allocation, parsing, retry, redirect, page fetch, or checkpoint advance;
+- accepted: XML has a dedicated consumable `XmlWork` ledger and progress
+  invariant covering namespace traversal, QName/end-tag/common-prefix
+  comparison, duplicate expanded attributes, and character references; every
+  parser step consumes input, emits one event, requests input, or exhausts a
+  ledger;
+- accepted: a registry-bound `DataHandlingProfile` makes reviewed
+  classification, cache, recording, transform, export, retention/purge, and
+  sensitive-field diagnostic behavior executable and survives in finalized
+  results. Once decoded data is returned, caller copying/logging remains
+  outside SDK enforcement;
 - accepted: local ledgers and coordinated quota authority are different
   controls; multi-process or otherwise coordinated execution fails closed when
   its reviewed operation requires shared authority and none is available;
@@ -232,7 +261,7 @@ attempt, following a redirect, fetching a page, or committing a checkpoint.
 Callers may tighten reviewed ceilings but cannot raise them through a stable
 public API.
 
-Five mechanisms remain distinct:
+Seven mechanisms remain distinct:
 
 - `Limits`: immutable operation maxima that callers may only tighten;
 - `Ledger`: non-`Copy`, non-`Clone` local capacity charged before work;
@@ -241,12 +270,17 @@ Five mechanisms remain distinct:
   cannot mint a fresh production partition to escape prior consumption;
 - `PolicyAuthority`: optional caller/deployment source of current revocation
   and monotonic policy-version state;
+- `DataHandlingProfile`: registry-bound executable classification, access,
+  cache, recording, transform/export, retention, and diagnostic restrictions;
+- `CacheStore`: optional caller-owned bounded storage behind executor-owned
+  blocking/async contracts; it never decides policy or access identity;
 - `AuthorizedExecution<R>`: a one-use registry-created package binding the
   exact canonical plan, registered encoder/decoder/validator profile,
-  output/provenance type, finalization rules, policy, ledger, and quota
-  requirement—but not an acquired quota lease. The executor never accepts an
-  authorization token alongside a separately caller-selected decoder or
-  semantic validator.
+  output/provenance type, finalization rules, policy, ledgers, quota/data-access
+  scopes, cache requirements, and `DataHandlingProfile`—but not an acquired
+  quota lease or selected cache entry. The executor never accepts an
+  authorization token alongside a separately caller-selected decoder,
+  semantic validator, access partition, or handling profile.
 
 A per-process limiter is described as advisory unless the dossier explicitly
 establishes that scope. Hosted or multi-process modes requiring coordinated
@@ -256,14 +290,22 @@ unavailable.
 `QuotaScope` is source-dossier data, not a free-form key. Its closed recipes
 cover source-global, origin/environment, coordinated deployment/IP,
 credential-pool, operation, and specifically reviewed compositions. For
-credential-pool scope, the conforming provider returns an opaque
-`CredentialPartitionId` beside the credential. The identifier is stable across
-rotation and aliases that share one upstream pool; raw credential bytes are
-never hashed, serialized, logged, or accepted as partition material.
+credential-pool scope, the conforming provider includes an opaque
+`CredentialPartitionId` in the non-secret credential binding. The identifier
+is stable across rotation and aliases that share one upstream pool; raw
+credential bytes are never materialized merely to choose it and are never
+hashed, serialized, logged, or accepted as partition material.
 Source-global, deployment/IP, and other cross-client recipes require a
 coordinated authority and fail closed when it is unavailable. Cache/data
 partitioning remains a separate typed decision and cannot silently subdivide a
 quota scope.
+
+`DataAccessScope` separately describes data entitlement. Anonymous public
+operations receive a registry-owned global `AccessPartitionId`; credentialed
+operations receive a provider-owned opaque partition in the same non-secret
+binding as the quota identity. Rotation preserves it only when entitlement is
+unchanged. A caller may add a bounded local namespace that narrows storage but
+cannot construct, merge, replace, or broaden authoritative partitions.
 
 ### 2.7 Closed request-header model
 
@@ -290,15 +332,47 @@ explicit reviewed `Vary` dimension. Credentials, transport framing, and
 operational diagnostics never become canonical or cache-key material.
 Cache-validator values are excluded from the base cache key so revalidation
 does not create a new identity; their slot is instead bound to the selected
-entry's exact cache key/partition, validator, policy/schema/registry versions,
-and reviewed `Vary` identity.
+entry's exact base key, authoritative `AccessPartitionId`, local narrowing
+namespace, validator, policy/schema/registry versions, classification/
+`DataHandlingProfile`, and reviewed `Vary` identity.
 
 No raw header map or generic `(name, value)` escape hatch exists in an
 authorized plan. Source dossiers and generated registry entries enumerate
 every admitted header slot, and the executor revalidates the closed set before
 credential injection and transport handoff.
 
-### 2.8 Honest capability claims
+### 2.8 Cache and access boundary
+
+`sweden-registry` supplies minimal non-secret cache entry, identity,
+`DataAccessScope`, `AccessPartitionId`, and permission vocabulary at `v0.9.0`.
+`sweden-executor` introduces `BlockingCacheStore` and `AsyncCacheStore` with
+semantic parity at `v0.21.0`. The explicit default is `NoCache`; no feature
+silently enables storage. `Client<T, C, Q, P, K, S = NoCache>` owns `S`, while
+one-shot execution accepts the same store contract explicitly.
+
+The store is a caller-owned trust boundary. A conforming implementation:
+
+- returns at most the requested bounded number of collision candidates;
+- supports atomic complete-entry replacement and fail-closed purge;
+- never returns a partially written entry as valid;
+- collapses storage failures to closed safe codes; and
+- preserves the canonical identity, authoritative access partition,
+  versions, classification, provenance, validator, `Vary`, and expiry fields.
+
+The executor, not the store, derives cache permission and base identity,
+charges `CacheLookupWork`, compares every candidate's full canonical identity,
+and rejects excess candidates before unbounded collision work. Every fresh,
+stale-within, cache-only, miss, and `304` decision rechecks current kill
+switch, policy/evidence/registry/schema versions, cache permission,
+`DataAccessScope`, `AccessPartitionId`, and classification.
+
+A fresh hit returns a prior `Finalized<R>` only after those checks. A
+cache-only miss returns a bounded miss without quota or I/O. A stale/miss path
+selects a validator from the exact candidate, then continues to quota
+admission. Cache errors follow the registered fail-closed/explicit-network-
+fallback policy and never turn an unvalidated candidate into a hit.
+
+### 2.9 Honest capability claims
 
 Crates report `Foundation`, `Experimental`, or `Stable`. A source cannot become
 stable until its exact operation set, source terms, schema revision, fixtures,
@@ -406,13 +480,13 @@ metadata changes. At `v1.0.0`, every crate then in the workspace converges to
 | Crate | Owns | Must not own |
 | --- | --- | --- |
 | `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan and closed header categories, borrowed-event contracts, authority-free invariant attempt generativity, structural completion traits/status, provenance vocabulary | concrete completion witnesses, policy decisions, I/O, credentials, agency models |
-| `sweden-policy` | source-independent dossier evaluation, revocation/expiry logic, closed response-outcome and cache/quota-scope requirement contracts | source registry data, transport calls, credentials, source decoding |
-| `sweden-registry` | generated closed membership, exact profile/header/outcome/quota compatibility, opaque `AuthorizedExecution<R>`, epoch-bound authority observation, invocation of bound success/error validators, private branded semantic witness | generic policy algorithms, transport calls, credentials, wire implementations |
+| `sweden-policy` | source-independent dossier evaluation, revocation/expiry logic, closed response-outcome, cache/data-access/quota-scope, and data-handling requirement contracts | source registry data, transport calls, credentials, source decoding |
+| `sweden-registry` | generated closed membership, exact profile/header/outcome/quota/access/data-handling compatibility, opaque `AuthorizedExecution<R>`, global public access partitions, epoch-bound authority observation, invocation of bound success/error validators, private branded semantic witness | generic policy algorithms, cache storage, transport calls, credentials, wire implementations |
 | `sweden-http` | blocking/async transport, normalized response metadata and body sink, redirect-as-data, safe transport codes, private branded `WireComplete` witness | authorization, retries, credential injection, agency semantics, network-bandwidth claims |
-| `sweden-executor` | time-of-use revalidation, generative attempt scope, quota-scope resolution and reservation/commit/release transitions, late credential/cache-validator injection, status-specific response dispatch, redirect/retry state machines, exact-branded-witness consumption, private `Finalized<R>`/complete provenance, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
+| `sweden-executor` | time-of-use revalidation, generative attempt scope, non-secret credential/access binding, optional blocking/async cache-store contracts and lookup state, quota-scope resolution, late `SecretLease` materialization/injection, status-specific response dispatch, redirect/retry state machines, exact-branded-witness consumption, private `Finalized<R>`/complete provenance, `Client<T, C, Q, P, K, S>` | concrete cache backend or HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
 | Codec crate | bounded syntax, event visitor, private branded codec-specific completion witness such as `JsonComplete` or `XmlComplete` | wire/semantic completion, I/O, policy authority |
 | `sweden-conformance` | synthetic operations, encoders, decoders, validators, output types, and fixtures | registry authority, generic execution, production source claims |
-| Agency crate | typed operation metadata, inputs, encoding, decoding, semantic validation | authority issuance, sockets, TLS, generic execution, other agencies |
+| Agency crate | typed operation metadata, inputs, encoding, decoding, semantic validation, generated sensitive-field handling metadata | authority issuance, cache stores, sockets, TLS, generic execution, other agencies |
 | `sweden` | feature wiring, aliases, and re-exports | implementation logic |
 
 The executor is generic over caller transport/clock/quota/credential resources
@@ -441,7 +515,8 @@ trust design is:
    non-`Clone`, and indivisibly binds one encoder profile and canonical plan,
    expected status/media profile, exact registered decoder and semantic
    validator, output/provenance type, limits, evidence, environment, origin,
-   authority decision, and finalization behavior.
+   authority decision, quota/data-access scopes, cache/data-handling decisions,
+   and finalization behavior.
 5. `sweden-executor` accepts only `AuthorizedExecution<R>` and drives the
    behavior it embeds. It has no public path that accepts a permit plus an
    arbitrary decoder, validator, media profile, or output type. Custom
@@ -511,10 +586,11 @@ wire-plus-codec-plus-semantic recipe:
 - `NotModified<R>` requires a complete reviewed `304` response and an
   already-selected previously `Finalized<R>` cache entry. The executor
   revalidates current cache permission and exactly matches cache key,
-  non-secret partition, validator, schema, policy and registry versions, and
-  every reviewed `Vary` dimension. It returns the prior finalized value with a
-  revalidation record; it never manufactures new semantic completion or runs
-  the normal body decoder.
+  authoritative access partition, local narrowing namespace, validator,
+  schema, policy and registry versions, `DataHandlingProfile`, classification,
+  and every reviewed `Vary` dimension. It returns the prior finalized value
+  with a revalidation record; it never manufactures new semantic completion or
+  runs the normal body decoder.
 - `EmptyResponse<R>` is admitted only when the registry profile names that
   status and a `NoBody` semantic output. It requires wire completion with an
   exactly empty body and cannot substitute for a body-bearing success.
@@ -554,14 +630,25 @@ binding every later state and completion witness
         ↓
 PolicyRevalidated<R>
         ↓
-late credential/provider selection into a protected one-use handle
-and opaque CredentialPartitionId when the quota scope requires it
+non-secret credential/access binding selection:
+provider token + quota/access partitions + generation/expiry
         ↓
-CredentialSelected<R>
+CredentialBindingSelected<R>
+        ↓
+cache permission + canonical identity derived and bounded lookup
+        ↓
+CacheResolved<R>
+        ├─ fresh hit → revalidate access/handling → prior Finalized<R>
+        ├─ cache-only miss → bounded miss, no quota or I/O
+        └─ stale/miss → exact entry validator or no validator
         ↓
 QuotaLeaseAcquired<R>
         ↓
-late credential injection into a reviewed execution sink
+final policy/binding revalidation after any quota wait
+        ↓
+SecretLeaseMaterialized<R>
+        ↓
+immediate credential injection into a reviewed execution sink
         ↓
 CredentialInjected<R>
         ↓
@@ -581,6 +668,10 @@ closed registered response-outcome dispatch
         └─ source error → registered error profile, never success
         ↓
 typed outcome; success provenance only for admitted success branches
+        ↓
+DataHandlingProfile + current cache permission
+        ↓
+optional atomic complete-entry replacement or fail-closed purge
 ```
 
 Every live attempt traverses these private, non-`Copy`, non-`Clone` states.
@@ -590,8 +681,9 @@ concurrent executions have identical Rust types and operation metadata.
 `PolicyRevalidated<R>` checks the bound freshness requirement, expiry,
 registry/policy version, revocation, kill switch, origin, and environment
 against trustworthy time and any required authority. The check occurs
-immediately before credential selection, before quota acquisition, and again
-before I/O; retry delays, redirects, and page transitions return to policy
+immediately before non-secret credential/access binding, before cache return,
+before quota acquisition, and again before secret materialization/I/O; retry
+delays, redirects, and page transitions return to policy
 revalidation rather than reusing an earlier decision. Callers may tighten a
 freshness requirement but cannot downgrade it.
 
@@ -616,20 +708,34 @@ SDK documents that residual race and does not call it atomic revocation;
 deployments requiring that property need a controlled broker or a future
 authority-issued one-attempt grant coupled to transport admission.
 
-`CredentialSelected<R>` contains either the registered no-credential marker or
-a private one-use provider handle coupling the credential to its opaque stable
-`CredentialPartitionId`; selection happens after policy revalidation, but
-wire injection remains later. A conforming provider preserves one partition
-across rotations/aliases sharing the same upstream quota pool and cannot cause
-secret bytes to become key material.
+`CredentialBindingSelected<R>` contains no secret bytes. It holds either the
+registered anonymous binding or an opaque provider token plus the bound
+`CredentialPartitionId`, `AccessPartitionId`, provider generation, and expiry.
+A conforming provider preserves the quota partition across rotations/aliases
+sharing one upstream rate pool, while preserving the access partition only
+when data entitlement is unchanged.
+
+`CacheResolved<R>` proves current cache permission, authoritative access
+partition, data-handling profile, canonical identity, collision-candidate/work
+budgets, and lookup outcome. A fresh hit revalidates these inputs immediately
+before returning the prior finalized value. A cache-only miss terminates
+without quota. Only stale/miss paths continue.
 
 `QuotaLeaseAcquired<R>` is an uncommitted attempt reservation plus concurrency
 lease acquired as late as possible. Its authority key is resolved from the
-registry-bound `QuotaScope` and `CredentialSelected<R>`, never from a
-caller-selected partition. Credential-provider failure happens before quota
-reservation. A later policy denial or credential-injection failure cancels the
-unused reservation and releases concurrency at most once; neither spends a
-network-attempt budget. Transition to
+registry-bound `QuotaScope` and `CredentialBindingSelected<R>`, never from a
+caller-selected partition.
+
+After any quota wait, the executor revalidates policy and asks the provider to
+materialize one non-cloneable `SecretLease` for the opaque binding. The
+provider must attest the same quota/access partitions and generation and a
+still-valid expiry. Mismatch, expiry, rotation with changed identity, or
+provider revocation cancels the unused reservation once and restarts at policy
+and binding selection. A valid lease is injected immediately and not retained
+for retry. Credential-binding failure occurs before quota reservation; later
+materialization, policy, or injection failure cancels the unused reservation
+and releases concurrency at most once. None spends a network-attempt budget.
+Transition to
 `AttemptCommitted<R>` records an atomic quota commit inside `QuotaAuthority`
 immediately before transport invocation. That commit cannot be atomic with an
 external network call: a crash after commit but before invoking the transport
@@ -642,10 +748,12 @@ release or lease expiry.
 Every blocking, async, mock, borrowed, owned, and custom-transport path starts
 with the same typed operation and canonical plan. Convenience APIs may
 orchestrate that path but cannot introduce a parallel “easy” execution
-surface. `Client<T, C, Q, P, K>` is introduced and owned by
+surface. `Client<T, C, Q, P, K, S = NoCache>` is introduced and owned by
 `sweden-executor` at `v0.21.0`; it may hold caller-supplied transport, clock,
-quota authority, policy authority, and credential provider but discovers none
-from ambient process state.
+quota authority, policy authority, credential provider, and explicit cache
+store but discovers none from ambient process state. Blocking and async cache
+contracts match the corresponding execution style; `NoCache` is the default
+and performs no storage.
 
 Pre-I/O `Cost` estimates expose reviewed maxima and selected query/projection
 work, but remain advisory; consumable ledgers are authoritative. Page,
@@ -656,11 +764,11 @@ pagination abstraction erases upstream semantics.
 The API must make it impossible to select an arbitrary production origin.
 Credentials are inserted only after the origin is validated and are excluded
 from debug output, cache keys, canonical hashes, errors, and fixtures.
-Authorized executions, revalidated states, credential selections, quota
-reservations/leases, credential-injected states, and in-flight attempts are
-non-`Copy`, non-`Clone`, operation-, environment-, and origin-bound. Retries,
-redirects, and subsequent pages require fresh checks, charges, and
-authorization.
+Authorized executions, revalidated states, credential/access bindings, cache
+decisions, quota reservations/leases, secret leases, credential-injected
+states, and in-flight attempts are non-`Copy`, non-`Clone`, operation-,
+environment-, and origin-bound. Retries, redirects, and subsequent pages
+require fresh checks, charges, and authorization.
 
 A caller-owned transport can still copy credentials, ignore deadlines, choose
 another destination, or log data. Sweden does not claim to sandbox arbitrary
@@ -685,7 +793,9 @@ source dossier:
    participation, reviewed `Vary` dimension, or transport-owned exclusion.
    Enumerate each accepted response status/outcome and one generated
    `QuotaScope`, including provider pool identity/rotation semantics and
-   required coordination.
+   required coordination. Define `DataAccessScope` and a complete
+   `DataHandlingProfile` for cache, recording, transform, export,
+   retention/purge, and sensitive-field diagnostic behavior.
 4. Pin official schema/specification inputs with retrieval metadata and hashes.
 5. Define explicit request, response, collection, retry, redirect, allocation,
    and time budgets.
@@ -720,6 +830,15 @@ source dossier:
 
 Policy expiry fails closed. An expired source review cannot silently continue
 hosted relaying.
+`AuthorizedExecution<R>` carries the registry-bound `DataHandlingProfile`, and
+`Finalized<R>` preserves it with provenance. Each Sweden-owned cache,
+testkit/fixture, transformation/export, retention/purge, diagnostic, and
+generated sensitive-field `Debug` path consumes the relevant closed decision
+instead of reinterpreting prose. Callers may narrow handling or local
+namespaces but cannot broaden permissions or merge access partitions. Once a
+decoded value is returned, Sweden cannot prevent caller code from copying,
+logging, retaining, transforming, or redistributing it; documentation states
+that trust boundary without weakening Sweden-owned enforcement.
 Evidence digests are standard cryptographic values computed by pinned offline
 tooling and carried as opaque reviewed bytes in `no_std` code; Sweden does not
 invent a runtime provenance hash. A digest proves byte identity only, not
@@ -798,6 +917,12 @@ JSON work is split into:
 XML work is split into:
 
 - strict UTF-8 and XML 1.0 character validation; XML 1.1 is rejected;
+- a consumable `XmlWork` ledger charged before namespace-scope traversal,
+  QName resolution, long common-prefix/end-tag comparisons, duplicate
+  expanded-attribute checks, and each character-reference digit/step;
+- a progress invariant: every parser transition must consume at least one
+  input byte, emit exactly one event, return `NeedInput`, or exhaust a declared
+  ledger—no unchanged state may spin;
 - bounded iterative tokenization with caller-provided stack;
 - explicit byte/work ceilings for names and QNames, namespace URIs, active
   namespace bindings, comments, CDATA, processing instructions, declarations,
@@ -809,6 +934,11 @@ XML work is split into:
   admitted;
 - canonical escaping and deterministic output;
 - source-specific streaming decode.
+
+Adversarial XML evidence includes many attributes with long common prefixes,
+deep namespace shadowing, repeated long end tags and character references, and
+one-byte chunking. Finite input/attribute limits are not treated as a substitute
+for computational-work accounting.
 
 CSV is admitted before 1.0 only if a reviewed Trafikverket operation requires
 it. If admitted, it always lives in `sweden-codec-csv`; otherwise the crate and
@@ -922,8 +1052,8 @@ The same trust distinction applies to all external authorities:
 | Transport | closed plans, normalized metadata contract, and body-wire ledger after transfer framing | conformance-tested origin/TLS/proxy/redirect, singleton/framing, and byte-accounting behavior | may send, retain, fabricate metadata, or misreport body/network bytes |
 | Clock | explicit monotonic/UTC requirements, ephemeral epoch, and fail-closed unknown/reset/wrap | passes rollback/jump/restart/epoch tests | may lie, stall, reset, or reuse an epoch |
 | Quota authority | permit required for the registry-bound `QuotaScope` | atomic reviewed admission under the exact generated partition recipe | may over-admit or treat forged partitions as fresh |
-| Credential provider | narrow source/environment/scope request | returns correctly scoped credentials plus stable opaque pool identity across shared-pool rotation/aliases | may return, retain, or log secrets, lie about pool identity, or cause partition explosion |
-| Cache/state store | typed directives, partitions, and bounded values | honors denial, purge, version, and collision rules | may retain forbidden/stale data |
+| Credential provider | narrow source/environment/scope binding then one-use materialization | returns non-secret quota/access partitions and generation/expiry, then a matching short-lived `SecretLease`; preserves only identities whose pool/entitlement is unchanged | may return, retain, or log secrets, lie/change identity, or cause partition explosion |
+| Cache/state store | executor derives policy/identity and bounds candidates/work | honors atomic replacement, purge, safe errors, exact metadata, access partitions, and candidate ceilings | may retain forbidden/stale data, cross partitions, return partial entries, or amplify collisions |
 | Policy/kill-switch authority | version/expiry/revocation and observation epoch are validated | supplies authenticated current state bound to the requested epoch | may suppress revocation, roll back, or replay an old observation |
 | Allocator | logical/requested/container budgets checked where observable | documents rounding, metadata, and failure behavior | may consume more physical memory than requested |
 | Event sink callback | borrow lifetime, bounded decisions, and safe error collapse | returns promptly and honors pause/stop/abort | may copy data, block, panic, or consume arbitrary CPU |
@@ -981,6 +1111,7 @@ Parsers additionally need:
 - deterministic mutation tests;
 - corpus replay;
 - stack-depth evidence;
+- progress-invariant and computational-work exhaustion tests;
 - exact-consumption tests;
 - no-panic arbitrary byte tests;
 - differential evidence against independently generated fixtures when that
@@ -1012,10 +1143,17 @@ Security deliverables grow with implementation:
   tests before any response can finalize;
 - generated quota-scope and opaque credential-partition forgery/rotation/
   aliasing/multi-client tests before live execution;
+- authority-derived access-partition, bounded cache-candidate/work, accidental
+  shared-store, and fresh/stale/cache-only/`304` revalidation tests before
+  cache exposure;
+- two-phase non-secret credential binding and late `SecretLease`
+  expiry/rotation/revocation/mismatch tests before credentials;
 - event-sink control, safe error, pause/abort, and panic-boundary tests before
   callback exposure;
 - SSRF and redirect tests before transport execution;
 - cache partition tests before caching;
+- executable `DataHandlingProfile` tests before cache, fixture, transform,
+  export, retention, or sensitive-field diagnostics can claim support;
 - tenant tests before hosted multi-tenancy;
 - policy expiry and kill-switch tests before hosted relaying;
 - release notes and pentest handoff for every version.
@@ -1061,6 +1199,9 @@ The granular version sequence and exact stop language live in
 - there are no unbudgeted parser, body, page, retry, or time paths;
 - JSON, XML, and CSV admitted subsets have final corpus and fuzz evidence;
 - every budget is a consumable pre-charged ledger rather than passive metadata;
+- XML namespace/QName/attribute/end-tag/reference work is charged through
+  `XmlWork`, and every parser step satisfies the consume/event/need-input/
+  exhaust progress invariant;
 - `BodyWireBytes` is documented and tested as adapter-delivered content-coded
   body bytes rather than total network bandwidth, and conforming metadata
   normalization rejects conflicting framing/singleton/trailer state;
@@ -1070,6 +1211,14 @@ The granular version sequence and exact stop language live in
   callers cannot mint partitions, credential-pool IDs survive shared-pool
   rotation/aliasing without secret-derived keys, and cross-client scopes
   require coordination;
+- every cache entry uses the dossier-generated `DataAccessScope` and
+  authority-derived `AccessPartitionId`; caller namespaces only narrow, cache
+  candidates/comparison work are bounded, and every hit/mode revalidates
+  current access, classification, evidence, policy, and kill switch;
+- credential binding contains no secret material; a one-use `SecretLease`
+  materialized after quota wait must match binding identity/generation/expiry
+  and is injected immediately or the reservation is cancelled and selection
+  restarts;
 - there is no arbitrary-origin path in Sweden-owned execution;
 - no credential-leaking path exists in Sweden-owned planning, execution,
   diagnostics, caching, fixtures, or replay code; arbitrary transports remain
@@ -1078,6 +1227,10 @@ The granular version sequence and exact stop language live in
   documented without cryptographic-sandbox claims;
 - operation-level policy, dossier, provenance, and expiry evidence gates every
   stable capability;
+- registry-bound `DataHandlingProfile` gates Sweden-owned cache, fixture,
+  transform/export, retention/purge, and sensitive-field diagnostic behavior
+  and is preserved in finalized provenance, without claiming control after
+  values cross into caller code;
 - every attempt passes non-downgradable time-of-use freshness revalidation,
   epoch-valid authority observation, late quota reservation, and an
   authority-local commit whose pre-network crash gap is conservatively spent;
