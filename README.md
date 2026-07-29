@@ -148,7 +148,7 @@ The repository starts fail-closed:
 - source integrations stay `Foundation` until their policy, fixtures, tests,
   upstream review, security review, and pentest gates pass;
 - CodeQL uses GitHub default setup rather than an advanced workflow;
-- non-generated Rust files over 500 lines fail the local gate.
+- generated and handwritten Rust files over 500 lines fail the local gate.
 
 Report vulnerabilities privately as described in the
 [security policy](https://github.com/valkyoth/sweden/blob/main/SECURITY.md).

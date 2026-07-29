@@ -130,6 +130,9 @@ Deliverables:
   closed constants for reviewed identifiers.
 - Reviewed source constants reserved for later binding to dossier/policy
   evidence; `SourceId::reviewed` cannot remain a general assertion API.
+- Explicit rule that IDs and public operation traits are descriptive
+  structural inputs, never authority; only a generated policy-registry entry
+  can later authorize a plan.
 - Non-zero version wrappers.
 - Small payload-free `ValidationError` categories for stable constructors
   instead of ambiguous `Option` failures.
@@ -140,8 +143,9 @@ Deliverables:
 Verification:
 
 - Inherited gate plus exhaustive empty, length, character, and boundary tests.
-- Compile-fail proof that downstream callers cannot mint a reviewed identifier
-  or stable execution authority.
+- Compile-fail proof that downstream callers cannot mint a reviewed identity
+  or stable execution authority through `sweden-core`, plus a positive proof
+  that dynamic descriptive IDs remain usable without implying review.
 - `no_std` compilation on MSRV and pinned stable.
 
 Exit criteria:
@@ -257,6 +261,11 @@ Goal: model access, hosted use, data class, cache, attribution, and retry rules.
 Deliverables:
 
 - Create and publish the focused dependency-free `sweden-policy` crate.
+- Closed reviewed-operation registry API owned by `sweden-policy`, with a
+  checked-in synthetic entry for capability tests; deterministic manifest
+  generation is added at `v0.20.0`.
+- Public structural operation contract that downstream crates may implement
+  without gaining registry membership or execution authority.
 - Dependency-free policy enums and validated operation policy.
 - Stable predicates for non-exhaustive access/status enums so callers do not
   encode wildcard policy logic.
@@ -271,6 +280,8 @@ Deliverables:
 Verification:
 
 - Inherited gate plus exhaustive allow/deny matrix tests.
+- Compile-fail construction tests for registry entries/keys plus hostile
+  unregistered operation and invented-entry denial tests.
 - Confirm missing fields never produce permissive defaults.
 
 Exit criteria:
@@ -317,10 +328,16 @@ Deliverables:
 - Source, operation, schema, policy, retrieval, licence, and transform metadata.
 - Raw/decoded/normalized/cache status distinctions.
 - Bounded transformation records.
-- Operational private evidence-bound capability and non-cloneable one-attempt
-  permit tying operation, plan, origin, environment, policy/dossier/schema
-  versions, reviewer trust root, expiry, quota requirement, and kill-switch
-  state to later execution.
+- Operational privately constructed, publicly opaque evidence-bound capability
+  and non-cloneable one-attempt permit tying operation, plan, origin,
+  environment, policy/dossier/schema versions, reviewer trust root, expiry,
+  quota requirement, and kill-switch state to later execution.
+- Minimal stable `MonotonicClock`, `UtcClock`, `QuotaAuthority`, and
+  `PolicyAuthority` contract shapes required by the later executor; algorithms
+  and calendar/retry stabilization remain at `v0.37.0`.
+- Public opaque permit type with fields/constructors private to
+  `sweden-policy`; downstream code may carry it but cannot construct, clone,
+  alter, or inspect authority-bearing internals.
 - Monotonic policy-version and rollback/downgrade rejection.
 - Provenance equality and serialization test vectors.
 
@@ -329,13 +346,16 @@ Verification:
 - Inherited gate plus missing/contradictory provenance, forged capability,
   wrong-plan/environment/origin, stale digest, rollback, expiry, kill-switch,
   and permit-reuse tests.
+- Hostile downstream test package that invents IDs/origins/operations,
+  implements the public contract, constructs dossier-shaped data, and attempts
+  to forge or obtain a permit for an unregistered plan.
 - Confirm cache and transformation steps cannot erase original identity.
 
 Exit criteria:
 
 - Every future successful operation can carry complete provenance, and later
-  executors can accept authority only through this private capability/permit
-  path.
+  executors can accept authority only through this opaque registry-bound
+  capability/permit path.
 - `v0.9.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.10.0 - `no_std` Transport Contract
@@ -402,6 +422,12 @@ Deliverables:
 
 - Independent wire/decoded consumable ledgers, chunk sink, completion state,
   and truncation detection.
+- Provisional stream state and non-forgeable finalized completion token
+  returned only by successful `finish()`.
+- No cache insertion, checkpoint/cursor advance, or `Complete` provenance from
+  provisional events.
+- Explicit caller warning that acting on provisional events transfers
+  rollback/compensation responsibility to the caller.
 - Header-byte/count, chunk-count, decoded-work, and UTF-8 carry limits.
 - Identity request encoding by default; unsupported response
   `Content-Encoding` is rejected and adapter-side transparent decompression is
@@ -417,7 +443,8 @@ Deliverables:
 Verification:
 
 - Inherited gate plus exact-limit, one-byte-over, partial, repeated-completion,
-  and counter-overflow tests.
+  counter-overflow, valid-prefix/malformed-trailer, duplicate-late-field, and
+  valid-prefix/truncation tests.
 
 Exit criteria:
 
@@ -461,14 +488,20 @@ Deliverables:
 - Iterative object/array parser using a caller-provided stack with depth,
   member, element, and total-token limits.
 - Operation-selected duplicate-key policy that rejects duplicates by default.
+- Caller-provided bounded key scratch and collision-safe comparison against
+  original key bytes, or bounded rescanning; hash-only duplicate decisions are
+  prohibited and every comparison/rescan charges work units.
 - Exact consumption after permitted trailing whitespace.
 - Borrowed event stream with caller scratch for decoded strings.
+- Mandatory `finish()` returning finalized state only after exact complete
+  structure validation.
 - Source-decoder hooks.
 
 Verification:
 
 - Inherited gate plus deep nesting, duplicate keys, trailing data, empty
-  structures, and token-budget exhaustion tests.
+  structures, colliding-key fixtures, scratch exhaustion, rescan work
+  exhaustion, and token-budget exhaustion tests.
 
 Exit criteria:
 
@@ -542,6 +575,8 @@ Deliverables:
   reserved-prefix enforcement, exact-consumption, and duplicate singleton
   policy.
 - Borrowed event interface.
+- Mandatory `finish()` returning finalized state only after closing every
+  element and consuming the complete document.
 
 Verification:
 
@@ -646,7 +681,8 @@ Deliverables:
 - Create and publish dependency-free `no_std` `sweden-executor`.
 - Generic authorization transitions, capability/quota-permit consumption,
   late credential injection, redirect/retry state machines, response
-  sink/decoder driving, and optional `alloc`-gated `Client<T, C, Q, K>`.
+  sink/decoder driving, and optional `alloc`-gated
+  `Client<T, C, Q, P, K>` including the policy authority.
 - Local-only source with open, denied, oversized, malformed, rate-limited, and
   stale-policy operations.
 - Blocking and async mock execution.
@@ -656,11 +692,15 @@ Deliverables:
 - Minimal live-execution guard requiring one admitted attempt, concurrency
   admission, operation/source quota decision, explicit credential scope, hard
   response/deadline budgets, and no automatic retry or redirect.
+- Time-boxed pinned out-of-process JSON, XML, and policy fuzz preflight with
+  tool version, command, duration, corpus hashes, minimized regressions, and no
+  unresolved crash/panic/hang/budget bypass.
 
 Verification:
 
 - Inherited gate plus end-to-end allow/deny, provenance, redaction, and budget
-  scenarios.
+  scenarios, provisional/finalized stream cases, hostile downstream authority
+  attempts, and preflight corpus replay.
 
 Exit criteria:
 
@@ -854,7 +894,8 @@ Deliverables:
 Verification:
 
 - Inherited gate plus truncation, mixed success/error, duplicate singleton,
-  unknown field, and oversized envelope fixtures.
+  unknown field, oversized envelope, valid-record-prefix followed by envelope
+  error, and valid-record-prefix followed by truncation fixtures.
 
 Exit criteria:
 
@@ -1006,6 +1047,8 @@ Deliverables:
   object family, schema version, policy version, and safe redaction rules.
 - Advance only after successful decoding and explicit caller acknowledgement;
   resume, deduplication guidance, and invalidation.
+- Finalized completion token required before caller acknowledgement or
+  checkpoint advance.
 - At-least-once contract.
 - Explicit statement that durable downstream processing and checkpoint
   persistence remain caller responsibilities.
@@ -1038,8 +1081,9 @@ Deliverables:
 - Non-cloneable rate/retry permits charged before each attempt and keyed by
   source, operation, environment, origin, credential/data partition, and
   reviewed policy revision.
-- `QuotaAuthority` contract for caller/deployment time, concurrency, and
-  coordinated shared-quota decisions.
+- Stabilize the minimal `v0.9.0` `QuotaAuthority` contract and implement
+  operation-selected interval, window, concurrency, and coordinated
+  shared-quota algorithms.
 - Caller-injected monotonic time for deadlines, intervals, and backoff, plus
   separately trusted UTC/civil time for calendar windows and policy expiry.
 - Explicit rollback, forward-jump, unavailable-time, and restart behavior,
@@ -1065,21 +1109,29 @@ Deliverables:
 
 - Policy-versioned non-secret keys, raw/derived distinction,
   `Fresh`/`StaleWithin`/`CacheOnly` modes, and purge dimensions.
+- Typed `ETag` and `Last-Modified` validators with size/character ceilings,
+  reviewed `Vary` dimensions, and strict `304` metadata merging.
+- Policy/schema version changes invalidate validators; secrets and arbitrary
+  headers cannot become validator or cache-key dimensions.
 - Caller-supplied collision-resistant key function where hashing is required,
   with canonical identity comparison before accepting a collision-sensitive
   hit.
 - Explicit non-secret data/credential partition input reserved from day one.
 - Provenance preservation across hits.
+- Finalized completion token required before cache insertion or validator
+  update.
 - Prohibited-cache tests.
 
 Verification:
 
 - Inherited gate plus credential exclusion, collision, stale, policy-change,
-  raw/derived, and purge tests.
+  raw/derived, ETag/Last-Modified bounds, `304` merge, unreviewed `Vary`,
+  validator invalidation, and purge tests.
 
 Exit criteria:
 
-- Policy denial always overrides caller cache preference.
+- Policy denial always overrides caller cache preference and provisional data
+  can never become a cache entry.
 - `v0.38.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.39.0 - Public API Ergonomics Review
@@ -1290,16 +1342,25 @@ Deliverables:
 - `Replayable` and `OneShot` request-body typestates with private consumption.
 - Retry permission jointly bound to method semantics, operation policy,
   attempt result, and body replayability.
-- Redirect resolution with fresh origin/policy/quota checks and no automatic
-  credential forwarding.
+- Explicit `301`, `302`, `303`, `307`, and `308` handling. Method rewriting is
+  denied unless the operation policy names it; method-preserving redirects
+  require a replayable body and fresh origin/policy/quota authority.
+- Fragment rejection, bounded relative-location normalization, and no
+  automatic credential forwarding.
+- Authorization challenges and adapter-side automatic authentication are
+  returned as data/denied unless an operation-specific state transition
+  explicitly admits them.
+- Bounded `Retry-After` delta-seconds and HTTP-date parsing using the correct
+  trusted clock domain.
 - Explicit ambiguous-delivery, authentication-challenge, cancellation, and
   partial-write states.
 
 Verification:
 
 - Inherited gate plus consumed/one-shot resend compile failures, partial write,
-  ambiguous result, auth challenge, redirect loop/cross-origin, and
-  credential-forwarding tests.
+  ambiguous result, every redirect status, forbidden/allowed method rewrite,
+  fragment, relative normalization, auth challenge, automatic auth,
+  `Retry-After`, redirect loop/cross-origin, and credential-forwarding tests.
 
 Exit criteria:
 
@@ -1445,15 +1506,19 @@ Exit criteria:
   corresponding work or authority use.
 - `v0.52.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.53.0 - Transport Trust And Conformance Audit
+## v0.53.0 - External Authority Trust And Conformance Audit
 
-Goal: state and test the exact guarantees at the caller-owned transport
-boundary.
+Goal: state and test the exact guarantees at every caller-owned transport and
+authority boundary.
 
 Deliverables:
 
 - Public trust statement: arbitrary transports are trusted components and are
   not sandboxed by trait design.
+- Three-level guarantee matrix for Sweden-owned behavior, conforming
+  implementations, and arbitrary implementations of transport, monotonic/UTC
+  clocks, quota authority, policy/kill-switch authority, credential provider,
+  and cache/coordinated-state store.
 - Reviewed-adapter conformance suite for closed origin, redirect-as-data,
   disabled automatic proxy behavior, bounded decompression, cancellation,
   timeout, redaction, and error translation.
@@ -1469,11 +1534,14 @@ Verification:
 - Inherited gate plus intentionally malicious/non-conforming transport tests
   demonstrating the boundary of the guarantee without weakening planner
   validation.
+- Lying clock, over-admitting quota, stale/rollback policy, wrong-scope
+  credential, forbidden-retention cache, and suppressed kill-switch test
+  doubles.
 
 Exit criteria:
 
-- Documentation and types make no cryptographic isolation claim that a caller
-  transport or deployment can invalidate.
+- Documentation and types make no isolation, freshness, quota, credential, or
+  retention claim that an arbitrary external authority can invalidate.
 - `v0.53.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.54.0 - Evidence-Bound Capability Stabilization Audit
@@ -1490,12 +1558,18 @@ Deliverables:
   redirect, and next-page consumption.
 - Fail-closed invalidation when evidence changes/expires, versions roll back,
   trust roots change, or a kill switch activates.
+- Explicit compiled-policy mode where expiry is the only automatic freshness
+  mechanism, and authority-backed mode where trusted `PolicyAuthority`
+  supplies current revocation/kill-switch/version state.
+- Narrow rollback guarantee: preventing execution of an older binary requires
+  an external authenticated monotonic policy authority.
 - `IntegrationStatus` retained only as descriptive metadata.
 
 Verification:
 
 - Inherited gate plus stale digest, wrong operation, wrong environment, expiry,
-  schema drift, forged status, and permit-reuse tests.
+  schema drift, forged status, permit reuse, absent authority, suppressed
+  revocation, policy rollback, and old-binary simulation tests.
 
 Exit criteria:
 
@@ -1565,9 +1639,10 @@ Deliverables:
 
 - One typed `Operation::plan` primitive shared by blocking, async, mock, and
   custom transports.
-- Audit the optional generic `Client<T, C, Q, K>` owned by
+- Audit the optional generic `Client<T, C, Q, P, K>` owned by
   `sweden-executor` over caller-supplied transport, clock, quota authority, and
-  credential provider, with no ambient discovery or facade implementation.
+  policy authority and credential provider, with no ambient discovery or
+  facade implementation.
 - Optional `.send()` and `.collect()` helpers that only orchestrate explicit
   transport, credential sink, clock, and budget inputs.
 - Typed response access to provenance, freshness, transformation, and source
@@ -1667,8 +1742,12 @@ Goal: prove bounded behavior during sustained failures and operational recovery.
 
 Deliverables:
 
-- Load, upstream outage, limiter outage, cache stampede, schema mismatch,
-  backup/restore, rollback, and source-disable exercises.
+- Load, upstream outage, limiter outage, cache stampede, and schema mismatch
+  exercises.
+- Caller-owned checkpoint serialization/recovery, quota/cache authority
+  restart, crash between permit consumption and response completion, stale
+  local cache, in-flight credential rotation, policy/schema update during
+  restart, rollback, and source-disable exercises.
 - Capacity and recovery objectives.
 - Incident and source-authority contact runbooks.
 

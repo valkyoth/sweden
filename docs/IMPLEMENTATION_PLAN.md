@@ -57,8 +57,8 @@ its established scope or gates:
   cryptographic sandboxes; Sweden guarantees policy and origin validation only
   inside Sweden-controlled planning and reviewed executors;
 - accepted: source policy and evidence are operation-specific, expiring, and
-  produce private consumable permits rather than relying on an agency-wide
-  access label;
+  produce opaque privately constructed consumable permits rather than relying
+  on an agency-wide access label or a sealed cross-crate trait;
 - accepted: configured limits become checked ledgers charged before I/O,
   allocation, parsing, retry, redirect, page fetch, or checkpoint advance;
 - accepted: local ledgers and coordinated quota authority are different
@@ -156,12 +156,14 @@ attempt, following a redirect, fetching a page, or committing a checkpoint.
 Callers may tighten reviewed ceilings but cannot raise them through a stable
 public API.
 
-Four mechanisms remain distinct:
+Five mechanisms remain distinct:
 
 - `Limits`: immutable operation maxima that callers may only tighten;
 - `Ledger`: non-`Copy`, non-`Clone` local capacity charged before work;
 - `QuotaAuthority`: caller/deployment coordination for time, concurrency, and
   shared upstream quotas;
+- `PolicyAuthority`: optional caller/deployment source of current revocation
+  and monotonic policy-version state;
 - `ExecutionPermit`: one-use evidence that plan, policy, ledger, and required
   quota authority agree.
 
@@ -177,8 +179,9 @@ stable until its exact operation set, source terms, schema revision, fixtures,
 tests, security review, and pentest evidence are current.
 
 `IntegrationStatus` is descriptive only. Executable stable behavior requires a
-private, generated capability bound to the operation policy, dossier digest,
-schema version, review expiry, environment, and current evidence.
+generated registry entry and an opaque privately constructed capability bound
+to the operation policy, dossier identity, schema version, review expiry,
+environment, and current evidence.
 
 ## 3. Workspace Architecture
 
@@ -265,14 +268,38 @@ metadata changes. At `v1.0.0`, every crate then in the workspace converges to
 | `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan vocabulary, provenance | policy decisions, I/O, credentials, agency models |
 | `sweden-policy` | dossier decisions, capability/permit issuance, cache/quota requirements | transport calls, credentials, source decoding |
 | `sweden-http` | blocking/async transport, response sink, redirect-as-data, safe transport codes | authorization, retries, credential injection, agency semantics |
-| `sweden-executor` | authorization transitions, quota-permit consumption, late credentials, redirect/retry state machines, sink/decoder driving, `Client<T, C, Q, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth |
-| Agency crate | sealed operation metadata, typed inputs, encoding, decoding, semantic validation | sockets, TLS, generic execution, other agencies |
+| `sweden-executor` | authorization transitions, quota-permit consumption, late credentials, redirect/retry state machines, sink/decoder driving, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth |
+| Agency crate | typed operation metadata, inputs, encoding, decoding, semantic validation | authority issuance, sockets, TLS, generic execution, other agencies |
 | `sweden` | feature wiring, aliases, and re-exports | implementation logic |
 
 The executor is generic over caller transport/clock/quota/credential resources
 and agency operation/decoder contracts. Agency crates never depend on the
 executor, and the executor never depends on an agency crate; the facade or
 application composes them.
+
+### 3.2 Cross-crate authority model
+
+Rust has no friend-crate mechanism, so Sweden does not claim that a core trait
+can be sealed while remaining implementable by an agency crate. The concrete
+trust design is:
+
+1. `sweden-core` exposes validating descriptive IDs, canonical plan types, and
+   public structural operation/decoder contracts. Downstream crates may
+   implement those contracts; doing so grants no execution authority.
+2. `sweden-policy` owns a generated closed reviewed-operation registry compiled
+   from canonical manifests. Public registry keys may select an existing entry
+   but no downstream crate can add one.
+3. Policy evaluation validates the complete canonical plan against the entry
+   and returns a public opaque `ExecutionPermit` whose fields and constructors
+   remain private to `sweden-policy`. It is non-`Copy`, non-`Clone`, bound to
+   one plan/evidence/environment/origin/authority decision, and consumed once.
+4. `sweden-executor` accepts only a valid registry-bound permit. A custom
+   operation implementation, descriptive ID, dossier-shaped value, or plan
+   cannot bypass registry validation or mint authority.
+
+A hostile downstream test package attempts each forbidden construction and
+custom trait implementation. Compile-fail tests prove non-construction and
+runtime tests prove that structurally valid unregistered plans are denied.
 
 ## 4. Request Lifecycle
 
@@ -289,7 +316,7 @@ credential-free canonical request plan
         ↓
 advisory cost + reviewed maximum inspection
         ↓
-private consumable policy/quota permit
+opaque consumable registry/policy/quota permit
         ↓
 late credential injection into a reviewed execution sink
         ↓
@@ -303,11 +330,12 @@ provenance-wrapped result
 ```
 
 Every blocking, async, mock, borrowed, owned, and custom-transport path starts
-with the same sealed typed operation and canonical plan. Convenience APIs may
+with the same typed operation and canonical plan. Convenience APIs may
 orchestrate that path but cannot introduce a parallel “easy” execution
-surface. `Client<T, C, Q, K>` is introduced and owned by `sweden-executor` at
-`v0.21.0`; it may hold caller-supplied transport, clock, quota authority, and
-credential provider but discovers none from ambient process state.
+surface. `Client<T, C, Q, P, K>` is introduced and owned by
+`sweden-executor` at `v0.21.0`; it may hold caller-supplied transport, clock,
+quota authority, policy authority, and credential provider but discovers none
+from ambient process state.
 
 Pre-I/O `Cost` estimates expose reviewed maxima and selected query/projection
 work, but remain advisory; consumable ledgers are authoritative. Page,
@@ -365,10 +393,24 @@ official origin, authenticity, currency, review, or lawful use. Stable
 capabilities additionally bind reviewer/trust-root evidence, monotonic policy
 version, rollback/downgrade detection, expiry, and kill-switch state.
 
+Compiled policy can age out through expiry but cannot discover a new
+revocation by itself. Immediate revocation requires a caller-supplied trusted
+`PolicyAuthority` or coordinated current-state provider. Without one, Sweden
+claims only compiled-policy identity and fail-closed expiry. Preventing an
+older binary from running likewise requires an external monotonic authority;
+static `no_std` code cannot guarantee deployment freshness.
+
 ## 6. Codec Strategy
 
 The no-third-party rule requires focused first-party codecs. They are not
 general-purpose replacements for ecosystem parsers.
+
+Streaming events are provisional until `finish()` validates the complete
+envelope, exact consumption, trailers, and truncation state and returns a
+non-forgeable finalized completion token. Provisional data cannot produce
+`Complete` provenance, enter a cache, or advance a cursor/checkpoint. Callers
+that act on provisional events before finalization explicitly own the
+downstream rollback/compensation risk.
 
 JSON work is split into:
 
@@ -378,6 +420,8 @@ JSON work is split into:
   handling;
 - iterative structure with token, depth, member, element, work-unit, and
   duplicate-key policy;
+- bounded caller scratch for exact duplicate-key bytes, with collision-safe
+  byte comparison or bounded rescanning and explicit work-unit charging;
 - exact consumption after trailing whitespace;
 - borrowed events with caller scratch rather than allocation merely to
   unescape;
@@ -468,6 +512,20 @@ discovery and redirects by default, avoid unmetered decompression and
 buffering, and translate adapter errors immediately into closed safe
 categories. These are conformance properties, not guarantees about arbitrary
 implementations.
+
+The same trust distinction applies to all external authorities:
+
+| External boundary | Sweden-owned behavior | Conforming implementation | Arbitrary implementation |
+| --- | --- | --- | --- |
+| Transport | closed plans and safe wire handoff | conformance-tested origin/TLS/proxy/redirect behavior | may send, retain, or fabricate anything |
+| Clock | explicit monotonic/UTC requirements and fail-closed unknown time | passes rollback/jump/restart tests | may lie or stall |
+| Quota authority | permit required where policy demands coordination | atomic reviewed admission semantics | may over-admit |
+| Credential provider | narrow source/environment/scope request | returns only correctly scoped credentials | may return, retain, or log secrets |
+| Cache/state store | typed directives, partitions, and bounded values | honors denial, purge, version, and collision rules | may retain forbidden/stale data |
+| Policy/kill-switch authority | version/expiry/revocation input is validated | supplies authenticated monotonic current state | may suppress revocation or roll back |
+
+Stronger guarantees require Sweden-controlled implementations or deployment
+isolation. Traits alone do not make these authorities trustworthy.
 
 ## 9. Platform Plan
 
@@ -594,6 +652,13 @@ The granular version sequence and exact stop language live in
   documented without cryptographic-sandbox claims;
 - operation-level policy, dossier, provenance, and expiry evidence gates every
   stable capability;
+- downstream operation implementations and descriptive IDs cannot mint
+  registry membership or execution authority;
+- provisional stream events cannot create complete provenance, cache entries,
+  or checkpoint advances before successful finalization;
+- external clock, quota, policy, credential, cache/state, and kill-switch
+  authority trust is documented and tested without extending Sweden-owned
+  guarantees to arbitrary implementations;
 - borrowed, `alloc`, `std`, and transport feature boundaries are verified;
 - generated and handwritten Rust source files all remain below 500 lines;
 - public docs contain no unsupported production claims;

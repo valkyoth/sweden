@@ -37,15 +37,20 @@ replace the established product scope, crate policy, or release gate.
 | Accepted concern | Versions that establish it | Later proof point |
 | --- | --- | --- |
 | Closed identifiers and operation-specific policy | `0.2.0`, `0.7.0..=0.9.0` | `0.20.0`, `0.54.0`, `0.59.0` |
+| Cross-crate authority without a false sealing claim | design at `0.2.0`, closed policy registry at `0.7.0`, opaque permits at `0.9.0` | hostile downstream proof at `0.9.0`/`0.21.0`, ownership audit at `0.45.0` |
 | Payload-free validation and one shared operation path | `0.2.0`, `0.4.0`, `0.5.0` | `0.39.0`, `0.56.0`, `0.57.0` |
 | Consumable pre-charged resource ledgers | `0.3.0`, `0.12.0`, parser and paging milestones | `0.52.0`, `0.56.0`, `0.94.0` |
-| Local ledgers versus coordinated quota authority | `0.37.0`, `0.48.0` | `0.52.0`, `0.91.0` |
+| Local ledgers versus coordinated quota authority | ledgers at `0.3.0`, minimal authority contract at `0.9.0`, executor use at `0.21.0` | algorithms at `0.37.0`/`0.48.0`, proof at `0.52.0`/`0.91.0` |
+| Stable external clock/quota/policy contract shapes | `0.9.0`, consumed by `0.21.0` | algorithms at `0.37.0`, trust audit at `0.53.0` |
 | `no_std` sans-I/O transport contract | `0.10.0..=0.12.0` | `0.53.0`, `0.55.0`, `0.58.0` |
 | Strict first-party JSON/XML and conditionally admitted CSV subsets | `0.13.0..=0.18.0`, `0.51.0` | `0.92.0`, `0.93.0` |
 | Evidence-bound expiring capabilities and permits | operational at `0.9.0`, used by `0.21.0..=0.24.0` | stabilization at `0.54.0`, then `0.59.0`, `0.97.0` |
 | Explicit generic executor ownership | `0.21.0` | `0.45.0`, `0.57.0`, `0.98.0` |
 | No live request before minimum quota/concurrency admission | `0.21.0`, `0.24.0` | full enforcement at `0.37.0`, topology proof at `0.91.0` |
 | Honest trusted-transport boundary | `0.10.0`, `0.21.0`, `0.23.0` | `0.53.0`, `0.58.0` |
+| Provisional versus finalized streaming | `0.12.0`, `0.21.0` | checkpoint/cache enforcement at `0.36.0`, `0.38.0` |
+| Initial adversarial fuzzing before official responses | `0.21.0` | broad baseline at `0.42.0`, final campaigns at `0.92.0`, `0.93.0` |
+| Trust limits for every caller authority | contract-specific milestones | combined matrix and malicious doubles at `0.53.0` |
 | Explicit default/`alloc`/`std`/transport tiers | all crate introductions and `0.40.0` | `0.55.0`, `0.98.0` |
 | Mobile, automotive, and future Aesynx portability | `0.40.0`, `0.41.0` | `0.56.0`, `0.94.0` |
 | Metadata-driven modularity and claim checking | `0.20.0`, `0.43.0`, `0.44.0` | `0.59.0`, `0.98.0` |
