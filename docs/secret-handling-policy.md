@@ -14,7 +14,11 @@ Before credential support is added:
 - query-string credentials require a separate uncredentialed representation;
 - test and production credentials must be separate types or environments;
 - credential binding must contain no secret bytes: only an opaque provider
-  token, quota/access partitions, generation, and expiry;
+  token, non-serializable provider-session epoch, quota/access partitions,
+  generation, and expiry;
+- binding tokens must be non-`Copy`, non-`Clone`, non-serializable, and
+  consumed by one `SecretLease` materialization or terminal cached return;
+  restart, epoch mismatch, generation reset/wrap, or replay forces reselection;
 - credential-pool quota identity must remain stable across shared-pool
   rotation/aliases, while access identity remains stable only when entitlement
   is unchanged; neither may derive from raw secret bytes;
@@ -26,6 +30,9 @@ Before credential support is added:
 - deadline expiry or cancellation during materialization/injection must drop
   the secret lease, release uncommitted authority at most once, and never
   transfer secret material to a cache-fill waiter;
+- cache lookup/fill waits carry no secret lease; before returning protected
+  cached data, the provider must revalidate non-secret access and the same
+  `AccessPartitionId`, otherwise the candidate is discarded or access denied;
 - fixture and replay tooling must fail closed on protected headers;
 - every secret-bearing error and debug path needs snapshot tests;
 - hosted credentials must be tenant-scoped and encrypted outside the SDK.

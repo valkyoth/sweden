@@ -74,15 +74,22 @@
   authority observations; restart, reset/wrap, or mismatch re-observes or
   denies;
 - distinct authorized, policy-revalidated, non-secret
-  credential/access-binding-selected, cache-resolved, quota-reserved,
-  final-policy-revalidated, one-use-secret-materialized, credential-injected,
-  attempt-committed, and attempt-in-flight states;
+  credential/access-binding-selected, cache-resolved, access-revalidated,
+  quota-reserved, final-policy-revalidated, one-use-secret-materialized,
+  credential-injected, attempt-committed, and attempt-in-flight states;
 - dossier-generated `QuotaScope` with no caller-created production partition;
   opaque provider pool IDs remain stable across shared-pool rotation/aliases,
   never derive from secrets, and cross-client scopes require coordination;
 - dossier-generated `DataAccessScope` with registry-global anonymous or
   provider-owned entitlement partitions distinct from quota; caller
   namespaces only narrow and entitlement-changing rotation changes partition;
+- invariant non-serializable `CredentialBindingEpoch` with generations valid
+  only inside one provider session; binding tokens are non-cloneable,
+  non-serializable, and consumed by materialization or terminal cache return;
+- fresh provider access revalidation before every credential-partitioned cache
+  hit/fill-waiter/`304` return; only the same current `AccessPartitionId` may
+  proceed, changed entitlement restarts lookup, and provider unavailability
+  denies protected cached data;
 - explicit `NoCache` default plus blocking/async cache-store boundary with
   bounded collision candidates/comparison work, atomic replacement/purge,
   safe errors, and current permission/access/classification revalidation on
@@ -100,9 +107,19 @@
 - declared store ceilings for entries, owned/encoded bytes, key/validator
   bytes, access-partition cardinality, and eviction/purge/cleanup work, with
   stable `StoreFull` and distinct insertion-versus-required-purge failure;
-- optional fenced exact-identity/access-partition cache-fill lease whose
+- optional fenced full-shareability cache-fill lease whose
   waiters hold neither quota nor credentials and whose cross-process guarantee
   requires coordination;
+- registry-produced opaque `CacheFillIdentity` includes local namespace,
+  environment/origin, schema/registry/policy, classification/handling,
+  representation/`Vary`, and raw/transformed identity as well as canonical
+  request and authoritative partition;
+- each fill publication atomically checks its monotonic fence; expired leaders,
+  coordination restart, reset/wrap, or takeover returns `StaleFence`, while
+  `304` updates compare-and-swap the selected `CacheEntryRevision`;
+- release and exact same-fence/revision/entry publication are idempotent while
+  conflicting repeats fail closed; cancellation after a live response
+  preserves that result without authorizing an unfenced write;
 - non-secret provider binding before cache/quota and matching short-lived
   one-use `SecretLease` only after quota wait/final policy check; expiry,
   revocation, generation, or partition mismatch cancels and restarts;

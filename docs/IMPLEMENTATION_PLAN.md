@@ -374,7 +374,7 @@ match” never decides authority.
 The store is a caller-owned trust boundary. A conforming implementation:
 
 - returns at most the requested bounded number of collision candidates;
-- supports atomic complete-entry replacement and fail-closed purge;
+- supports atomic revisioned complete-entry replacement and fail-closed purge;
 - never returns a partially written entry as valid;
 - collapses storage failures to closed safe codes; and
 - preserves the canonical identity, authoritative access partition,
@@ -410,12 +410,30 @@ Ordinary insertion failure preserves an otherwise successful live result;
 failure to purge data now forbidden by policy or handling rules is a surfaced
 policy/storage violation and cannot be silently downgraded.
 
-An optional fenced `CacheFillLease` may coalesce an exact canonical identity
-and authoritative access partition. Waiters hold no quota or credential
-lease; only the elected filler proceeds to upstream admission. Cancellation
-or expiry allows one bounded fenced takeover. Cross-process coalescing is
-claimed only by a coordinated store, and unsupported stores honestly claim no
-stampede protection.
+An optional fenced `CacheFillLease` may coalesce requests only within one
+exact shareability domain. Its key is a registry-produced opaque
+`CacheFillIdentity`, not a caller string or hash alone. The identity binds the
+full canonical request, authoritative access partition, local narrowing
+namespace, environment, origin, schema/registry/policy versions,
+classification, `DataHandlingProfile`, reviewed representation/`Vary`
+dimensions, and raw versus exact transformed-result identity. Unrelated local
+namespaces, policy revisions, representations, or transform outputs never
+share leadership.
+
+Waiters hold no quota or credential lease; only the elected filler proceeds to
+upstream admission. Every lease carries a monotonically fenced publication
+token in the store's coordination epoch. Complete-entry publication atomically
+checks that fence, and `304` validator/metadata publication additionally
+compare-and-swaps the exact selected `CacheEntryRevision`. Expired leaders,
+store restart/epoch mismatch, revision mismatch, wrap/reset, or takeover
+return closed `StaleFence`/`RevisionChanged` without writing. Publication and
+release are idempotent only for the same fence/revision and exact complete
+entry; a conflicting repeated publication fails closed. Cancellation after a
+live response but before publication preserves the live result but cannot
+perform an unfenced write.
+Cancellation or expiry allows one bounded fenced takeover. Cross-process
+coalescing is claimed only by a coordinated store, and unsupported stores
+honestly claim no stampede protection.
 
 ### 2.9 Honest capability claims
 
@@ -676,14 +694,16 @@ binding every later state and completion witness
 PolicyRevalidated<R>
         ↓
 non-secret credential/access binding selection:
-provider token + quota/access partitions + generation/expiry
+provider token + binding epoch + quota/access partitions + generation/expiry
         ↓
 CredentialBindingSelected<R>
         ↓
 cache permission + canonical identity derived and bounded lookup
         ↓
 CacheResolved<R>
-        ├─ fresh hit → revalidate access/handling → prior Finalized<R>
+        ├─ fresh hit → AccessRevalidated<R>
+        │       ├─ same partition/current binding → prior Finalized<R>
+        │       └─ changed/expired/unavailable → discard and restart or deny
         ├─ cache-only miss → bounded miss, no quota or I/O
         └─ stale/miss → exact entry validator or no validator
         ↓
@@ -707,7 +727,7 @@ bounded body sink
         ↓
 closed registered response-outcome dispatch
         ├─ body → exact codec + semantic validation
-        ├─ 304 → exact finalized cache-entry revalidation
+        ├─ 304 → access revalidation + exact entry revision/CAS
         ├─ reviewed empty → exact NoBody profile
         ├─ redirect → bounded redirect state, never success
         └─ source error → registered error profile, never success
@@ -716,7 +736,7 @@ typed outcome; success provenance only for admitted success branches
         ↓
 DataHandlingProfile + current cache permission
         ↓
-optional atomic complete-entry replacement or fail-closed purge
+optional atomically fenced revisioned publication or fail-closed purge
 ```
 
 Every live attempt traverses these private, non-`Copy`, non-`Clone` states.
@@ -755,16 +775,40 @@ authority-issued one-attempt grant coupled to transport admission.
 
 `CredentialBindingSelected<R>` contains no secret bytes. It holds either the
 registered anonymous binding or an opaque provider token plus the bound
-`CredentialPartitionId`, `AccessPartitionId`, provider generation, and expiry.
+`CredentialBindingEpoch<'provider>`, `CredentialPartitionId`,
+`AccessPartitionId`, provider generation, and expiry. The executor establishes
+the non-serializable invariant epoch for one borrowed provider session;
+generations are meaningful only inside it. A conforming provider terminates
+that session on backend restart and never resets, wraps, or reuses a generation
+within an epoch. Restart, reset/wrap, replay, epoch mismatch, or provider
+replacement forces a new binding selection. The token is non-`Copy`,
+non-`Clone`, non-serializable, and consumed by one secret materialization or
+one terminal cached return. A caller-owned provider can lie about its session;
+the executor does not claim to sandbox it.
+
 A conforming provider preserves the quota partition across rotations/aliases
 sharing one upstream rate pool, while preserving the access partition only
 when data entitlement is unchanged.
 
 `CacheResolved<R>` proves current cache permission, authoritative access
 partition, data-handling profile, canonical identity, collision-candidate/work
-budgets, and lookup outcome. A fresh hit revalidates these inputs immediately
-before returning the prior finalized value. A cache-only miss terminates
+budgets, selected entry revision, and lookup outcome. Before every
+credential-partitioned cached return—including an immediate hit, a cache-fill
+waiter wakeup, and a `304`—the executor consumes the earlier binding and asks
+the provider to reselect/revalidate non-secret access. The result becomes a
+private `AccessRevalidated<R>` only when its epoch/generation/expiry is current
+and its `AccessPartitionId` exactly matches the candidate. A changed partition
+discards the candidate and repeats bounded lookup under the new partition;
+expiry, revocation, restart, or provider unavailability fails closed for
+protected data. Anonymous global entries use the registry-owned access
+assertion but still pass the same closed state. A cache-only miss terminates
 without quota. Only stale/miss paths continue.
+
+For a `304`, access revalidation occurs again after the network wait and before
+the prior finalized value is returned. Any permitted validator/metadata update
+uses compare-and-swap against the selected `CacheEntryRevision`; a concurrent
+replacement or stale fill fence preserves the selected prior finalized result
+but rejects the update.
 
 `QuotaLeaseAcquired<R>` is an uncommitted attempt reservation plus concurrency
 lease acquired as late as possible. Its authority key is resolved from the
@@ -809,11 +853,12 @@ pagination abstraction erases upstream semantics.
 The API must make it impossible to select an arbitrary production origin.
 Credentials are inserted only after the origin is validated and are excluded
 from debug output, cache keys, canonical hashes, errors, and fixtures.
-Authorized executions, revalidated states, credential/access bindings, cache
-decisions, quota reservations/leases, secret leases, credential-injected
-states, and in-flight attempts are non-`Copy`, non-`Clone`, operation-,
-environment-, and origin-bound. Retries, redirects, and subsequent pages
-require fresh checks, charges, and authorization.
+Authorized executions, policy/access-revalidated states, credential/access
+bindings, cache decisions/fill leases/publication fences, quota
+reservations/leases, secret leases, credential-injected states, and in-flight
+attempts are non-`Copy`, non-`Clone`, operation-, environment-, and
+origin-bound. Retries, redirects, and subsequent pages require fresh checks,
+charges, and authorization.
 
 A caller-owned transport can still copy credentials, ignore deadlines, choose
 another destination, or log data. Sweden does not claim to sandbox arbitrary
@@ -1108,8 +1153,8 @@ The same trust distinction applies to all external authorities:
 | Transport | closed plans, normalized metadata contract, and body-wire ledger after transfer framing | conformance-tested origin/TLS/proxy/redirect, singleton/framing, and byte-accounting behavior | may send, retain, fabricate metadata, or misreport body/network bytes |
 | Clock | explicit monotonic/UTC requirements, ephemeral epoch, and fail-closed unknown/reset/wrap | passes rollback/jump/restart/epoch tests | may lie, stall, reset, or reuse an epoch |
 | Quota authority | permit required for the registry-bound `QuotaScope` | atomic reviewed admission under the exact generated partition recipe | may over-admit or treat forged partitions as fresh |
-| Credential provider | narrow source/environment/scope binding then one-use materialization | returns non-secret quota/access partitions and generation/expiry, then a matching short-lived `SecretLease`; preserves only identities whose pool/entitlement is unchanged | may return, retain, or log secrets, lie/change identity, or cause partition explosion |
-| Cache/state store | executor derives policy/identity/time, rejects duplicate exact candidates, and never deserializes `Finalized<R>` | honors declared capacity, atomic replacement/purge, safe errors, exact metadata/access partitions, entry trust level, cache epoch or authenticated expiry, and candidate ceilings | may retain/forge forbidden or stale data, cross partitions/epochs, lie about time/capacity, return partial entries, or amplify collisions |
+| Credential provider | narrow source/environment/scope binding and private provider-session epoch, then access revalidation/one-use materialization | returns non-secret quota/access partitions and epoch-bound generation/expiry, reports restart, revalidates protected-cache access, then returns a matching short-lived `SecretLease`; preserves only identities whose pool/entitlement is unchanged | may return, retain, replay, or log secrets/tokens, lie/change identity, reuse an epoch/generation, disappear during revalidation, or cause partition explosion |
+| Cache/state store | executor derives policy/full fill identity/time, rejects duplicate exact candidates, and never deserializes `Finalized<R>` | honors declared capacity, atomic fenced revisioned replacement/purge, CAS, idempotent release/publication, safe errors, exact metadata/access partitions, entry trust level, cache/coordination epoch or authenticated expiry, and candidate ceilings | may retain/forge forbidden or stale data, cross partitions/epochs, lie about time/capacity, accept stale fences/revisions, return partial entries, or amplify collisions |
 | Policy/kill-switch authority | version/expiry/revocation and observation epoch are validated | supplies authenticated current state bound to the requested epoch | may suppress revocation, roll back, or replay an old observation |
 | Allocator | logical/requested/container budgets checked where observable | documents rounding, metadata, and failure behavior | may consume more physical memory than requested |
 | Event sink callback | borrow lifetime, bounded decisions, and safe error collapse | returns promptly and honors pause/stop/abort | may copy data, block, panic, or consume arbitrary CPU |
@@ -1202,9 +1247,15 @@ Security deliverables grow with implementation:
 - authority-derived access-partition, bounded cache-candidate/work, accidental
   shared-store, and fresh/stale/cache-only/`304` revalidation tests before
   cache exposure;
+- post-cache-wait credential access revalidation, binding epoch/generation ABA,
+  token consumption, changed-partition restart, and provider-unavailable
+  denial tests before credential-protected cache return;
 - cache-entry trust, non-deserializable provenance, cache epoch/restart/time
   rollback, duplicate-exact-candidate, capacity/partition-cardinality, and
   conditional-validator tests before cache stabilization;
+- full-shareability fill identity, atomically fenced publication, entry
+  revision/CAS, expired-leader late-write, and idempotent publication/release
+  tests before cache-fill coalescing;
 - cancellation and never-returning tests for cache, policy, quota, and
   credential authorities as well as transport, with fenced cleanup evidence;
 - two-phase non-secret credential binding and late `SecretLease`
@@ -1288,6 +1339,13 @@ The granular version sequence and exact stop language live in
 - cache capacity, partition cardinality, eviction, cleanup, and purge work are
   bounded; optional fill coalescing is fenced and never lets waiters hold
   quota or credential leases;
+- credential bindings are non-serializable, non-cloneable, one-use, and bound
+  to one `CredentialBindingEpoch`; every protected cached return revalidates
+  provider access after waits, requires the same access partition, and
+  restarts lookup or denies on expiry/revocation/restart/ABA/unavailability;
+- `CacheFillIdentity` contains the complete shareability domain, publication
+  atomically checks a monotonic fence, `304` updates compare-and-swap the
+  selected entry revision, and stale leaders/revisions cannot write;
 - credential binding contains no secret material; a one-use `SecretLease`
   materialized after quota wait must match binding identity/generation/expiry
   and is injected immediately or the reservation is cancelled and selection

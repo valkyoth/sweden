@@ -25,6 +25,10 @@ Status: foundation model extended for the planned registry/executor boundary
 - Cache-entry provenance trust, non-deserializable `Finalized<R>`, exact-match
   uniqueness, `CacheEpoch`/trusted-expiry freshness, and bounded persistent
   capacity/partition cardinality.
+- Provider-session binding epoch/generation integrity, one-use non-secret
+  binding tokens, and current same-partition access assertion at cached return.
+- Full cache-fill shareability identity, monotonic publication fencing,
+  entry-revision compare-and-swap, and idempotent publication/release.
 - Non-secret credential binding identity/generation/expiry and matching
   short-lived one-use secret materialization.
 - Registry-bound executable data-handling profile preserved in finalized
@@ -33,8 +37,8 @@ Status: foundation model extended for the planned registry/executor boundary
 - Honest meaning of adapter-delivered body-wire bytes and normalized response
   metadata.
 - Freshness requirements and the ordering of policy revalidation, non-secret
-  binding, cache resolution, quota reservation, late secret/injection,
-  commit, and transport handoff.
+  binding, cache resolution, access revalidation, quota reservation, late
+  secret/injection, commit, and transport handoff.
 - Non-serializable current-authority observations and their originating
   monotonic clock/session epoch.
 - Integrity and provenance of official data.
@@ -71,9 +75,15 @@ Status: foundation model extended for the planned registry/executor boundary
   returning duplicate exact candidates, replaying a prior cache epoch, lying
   about authenticated persistence/expiry, exploiting clock rollback/skew, or
   exhausting entries, bytes, validators, partitions, eviction, or purge work.
+- A provider reusing a binding epoch/generation or consumed token after
+  restart, reset, wrap, or ABA; revoking/changing entitlement while cache
+  lookup/fill/`304` waits; or becoming unavailable before protected return.
 - Concurrent callers stampeding one lawful cache miss, retaining quota/secrets
   while waiting, or exploiting cancelled/expired cache-fill leadership to
   bypass fencing.
+- An expired fill leader publishing after takeover, a store accepting a stale
+  fence or revision, concurrent `304` updates overwriting each other, or a
+  partial fill identity coalescing unrelated namespaces/policies/results.
 - A provider expiring, revoking, rotating, or changing identity between
   non-secret binding and secret materialization, or retaining a secret lease.
 - XML engineered for quadratic namespace/QName/attribute/end-tag/reference
@@ -124,6 +134,9 @@ Status: foundation model extended for the planned registry/executor boundary
 - Opaque in-process cache entry or externally authenticated persistent record
   through entry-trust, exact-match, cache-time, and private reconstruction
   checks to a reusable finalized value.
+- Earlier credential binding through cache/network waits to a fresh
+  same-partition provider assertion and private `AccessRevalidated<R>` before
+  protected cached return.
 - Provider/registry-derived access binding through bounded cache lookup,
   current hit permission, and store replacement/purge.
 - Retained authorization to immediate policy freshness revalidation.
@@ -156,8 +169,10 @@ Status: foundation model extended for the planned registry/executor boundary
 - Cargo tools and GitHub Actions to release evidence.
 - Local ledger to coordinated quota/concurrency authority, including lease
   acquisition, fencing, release, expiry, cancellation, and restart.
-- Canonical identity/access partition to optional fenced cache-fill admission,
-  leader expiry/cancellation, bounded takeover, and waiter release.
+- Registry-produced full `CacheFillIdentity` to optional fenced cache-fill
+  admission, then store-issued fence/revision through leader expiry/
+  cancellation, bounded takeover, atomic publication, waiter release, or
+  closed stale-fence/revision rejection.
 - Source response to fixture classification/retention decision and replay
   evidence validation.
 - Authority observation to the originating monotonic clock/session epoch.
@@ -187,6 +202,11 @@ Status: foundation model extended for the planned registry/executor boundary
 - `DataAccessScope` is distinct from quota: anonymous public partitions are
   registry-owned, credentialed partitions are provider entitlement IDs,
   local namespaces only narrow, and changed entitlement changes partition.
+- Credential bindings carry an invariant non-serializable provider-session
+  epoch, in-epoch generation, expiry, and a non-cloneable one-use token.
+  Restart/reset/wrap/replay/mismatch reselects; every protected cached return
+  revalidates current provider access, requires the same partition, and
+  restarts lookup or denies on change/unavailability.
 - Explicit `NoCache` plus blocking/async store contracts bound candidate count
   and comparison work, require atomic complete replacement/purge and safe
   errors, and leave permission/identity decisions in the executor.
@@ -205,8 +225,11 @@ Status: foundation model extended for the planned registry/executor boundary
   insertion failure preserves live success, and forbidden-data purge failure
   is surfaced as a policy/storage violation.
 - Optional fenced cache-fill admission elects one filler without quota or
-  secret leases in waiters; cancellation/expiry allows bounded takeover and no
-  cross-process coalescing is claimed without coordination.
+  secret leases in waiters. Registry-produced fill identity covers every
+  shareability dimension; publication atomically checks a monotonic fence,
+  `304` updates CAS the selected revision, cancellation/expiry allows bounded
+  takeover, stale leaders cannot write, release/publication is idempotent, and
+  no cross-process coalescing is claimed without coordination.
 - Closed `CompiledUntil`/`CurrentAuthorityRequired` freshness modes rechecked
   immediately before credentials/I/O and after waits, redirects, and page
   transitions; callers can tighten but never downgrade them.
@@ -290,9 +313,10 @@ Status: foundation model extended for the planned registry/executor boundary
 - Caller-provided quota, policy, credential, cache, and allocator
   implementations can invalidate guarantees assigned to those boundaries.
 - An arbitrary cache store may retain/cross/fabricate entries or ignore purge,
-  trust/time/capacity claims, ignore purge, or stall forever, and an arbitrary
-  credential provider may lie about binding/entitlement, retain secret
-  material, or stall forever; traits do not sandbox either.
+  lie about trust/time/capacity/fences/revisions, ignore purge, or stall
+  forever, and an arbitrary credential provider may lie about session epochs,
+  generations, binding/entitlement, retain secret material/tokens, or stall
+  forever; traits do not sandbox either.
 - `BodyWireBytes` excludes TLS, HTTP transfer/framing, headers,
   retransmissions, and other network overhead; actual bandwidth enforcement
   remains a transport/deployment guarantee, and arbitrary transports may lie

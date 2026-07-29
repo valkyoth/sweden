@@ -21,16 +21,18 @@ Rules:
   caller-authority state into non-serializable epoch-specific observations.
 - `sweden-registry` binds each operation's exact status/outcome profile and
   generated `QuotaScope`, `DataAccessScope`, global anonymous/provider
-  partition recipe, and `DataHandlingProfile`; callers cannot replace them
-  with generic handlers or free-form production partitions.
+  partition recipe, `DataHandlingProfile`, and opaque full-shareability
+  `CacheFillIdentity`; callers cannot replace them with generic handlers,
+  partial fill keys, or free-form production partitions.
 - `sweden-executor` owns generic execution only. Synthetic operation,
   encoder, decoder, validator, fixture, and output semantics live in the
   separate `sweden-conformance` crate.
 - `sweden-executor` alone orchestrates non-secret credential/access binding,
   explicit blocking/async/`NoCache` store contracts, bounded cache lookup,
-  closed entry-trust/cache-time decisions, validator insertion, optional
-  fenced fill leases, quota scope, late one-use secret materialization,
-  registered response outcomes, and successful final provenance.
+  post-wait access revalidation, closed entry-trust/cache-time decisions,
+  validator insertion, optional fenced revisioned fill publication, quota
+  scope, late one-use secret materialization, registered response outcomes,
+  and successful final provenance.
 - `sweden-core` owns canonical closed request-header categories and structural
   completion/generative attempt vocabulary only; constructing a structural
   attempt brand grants no execution or completion authority.
@@ -43,9 +45,11 @@ Rules:
   `BodyWireBytes`; it does not claim TLS/HTTP framing or total network
   bandwidth ownership.
 - Credential providers own opaque binding tokens, quota/access partition IDs,
-  generations/expiries, and one-use `SecretLease` materialization; cache stores
-  own storage mechanics and declared capacity only and cannot decide access,
-  provenance, freshness, or handling policy or deserialize `Finalized<R>`.
+  session epochs, generations/expiries, access revalidation, and one-use
+  `SecretLease` materialization; cache stores own storage mechanics, revisions,
+  fences, and declared capacity only and cannot decide access, fill
+  shareability, provenance, freshness, or handling policy or deserialize
+  `Finalized<R>`.
 - Agency crates own generated field sensitivity/handling metadata but cannot
   broaden the registry-bound operation profile.
 - Transport crates do not own agency semantics.
