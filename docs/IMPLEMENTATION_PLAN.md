@@ -26,8 +26,8 @@ The 1.0 product is:
 - a transport-neutral `sweden-http` boundary;
 - a production-ready `sweden-trafikverket` integration;
 - a small feature-gated `sweden` facade;
-- a repeatable agency-onboarding system demonstrated by at least one secondary
-  conformance integration;
+- a repeatable agency-onboarding system demonstrated by a synthetic
+  conformance source without pulling post-1.0 agencies forward;
 - documentation and policy evidence suitable for serious production review.
 
 The `0.1.0` workspace deliberately contains only `sweden-core` and `sweden`.
@@ -41,6 +41,41 @@ The 1.0 product is not:
 - a promise that every visible dataset may be cached, transformed, or relayed;
 - a replacement for legal review;
 - a hosted credential pool for callers who are not independently authorized.
+
+### 1.1 Gap-analysis integration decisions
+
+The post-`0.1.0` architecture review strengthens this plan without replacing
+its established scope or gates:
+
+- accepted: `sweden-http` is a dependency-free `no_std` contract crate;
+  sockets, TLS, clocks, executors, environment lookup, and platform networking
+  remain outside it;
+- accepted: caller-provided transports are trusted components, not
+  cryptographic sandboxes; Sweden guarantees policy and origin validation only
+  inside Sweden-controlled planning and reviewed executors;
+- accepted: source policy and evidence are operation-specific, expiring, and
+  produce private consumable permits rather than relying on an agency-wide
+  access label;
+- accepted: configured limits become checked ledgers charged before I/O,
+  allocation, parsing, retry, redirect, page fetch, or checkpoint advance;
+- accepted: JSON, XML, and CSV are narrow first-party subsets with explicit
+  rejection behavior, caller-owned scratch in borrowed mode, and final fuzz
+  campaigns before 1.0;
+- accepted: default, `alloc`, `std`, transport, and agency capability tiers are
+  explicit and never silently enable networking, credentials, proxy discovery,
+  telemetry, live tests, or hosted relaying;
+- retained: the zero-third-party and safe-Rust rules. A concrete ecosystem
+  HTTP/TLS adapter or mobile FFI binding requires a future explicit dependency
+  or unsafe-code admission decision and is not promised for 1.0;
+- retained: Trafikverket is the only production agency scope before 1.0.
+  SMHI, SCB, JobTech, and Skatteverket stay on the documented post-1.0 tracks;
+- retained: the existing version-by-version pentest, GitHub, tagging, and
+  independent publication process.
+
+`RELEASE_PLAN.md` remains the authoritative version sequence. External reviews
+may propose replacement roadmaps, but accepted work is mapped into that
+sequence explicitly rather than silently renumbering or weakening established
+milestones.
 
 ## 2. Non-Negotiable Engineering Rules
 
@@ -103,11 +138,21 @@ strings, collection elements, pages, records, redirects, time, and retries.
 There is no unbudgeted `collect_all`, response buffering, decompression, archive
 extraction, or recursive parse.
 
+Configured ceilings and consumed state are separate types. Charges use checked
+arithmetic and occur before accepting bytes, allocating, transmitting an
+attempt, following a redirect, fetching a page, or committing a checkpoint.
+Callers may tighten reviewed ceilings but cannot raise them through a stable
+public API.
+
 ### 2.7 Honest capability claims
 
 Crates report `Foundation`, `Experimental`, or `Stable`. A source cannot become
 stable until its exact operation set, source terms, schema revision, fixtures,
 tests, security review, and pentest evidence are current.
+
+`IntegrationStatus` is descriptive only. Executable stable behavior requires a
+private, generated capability bound to the operation policy, dossier digest,
+schema version, review expiry, environment, and current evidence.
 
 ## 3. Workspace Architecture
 
@@ -117,17 +162,15 @@ Planned 1.0 dependency direction:
 sweden-core
     ↑
     ├── sweden-http
-    ├── sweden-trafikverket
-    ├── sweden-smhi
-    ├── sweden-scb
-    ├── sweden-jobtech
-    └── sweden-skatteverket
+    └── sweden-trafikverket
              ↑
-          sweden
+           sweden
 ```
 
 The facade depends on selected crates only through feature flags. Agency crates
 do not depend on `sweden-http`; they emit transport-neutral operation plans.
+SMHI, SCB, JobTech, and Skatteverket are post-1.0 additions and therefore do
+not appear in the 1.0 graph.
 
 At `0.1.0`, the implemented graph is only:
 
@@ -147,7 +190,7 @@ large for one audit:
 | `sweden-codec-xml` | `no_std`/`alloc` | Bounded first-party XML without DTD/entities |
 | `sweden-codec-csv` | `no_std`/`alloc` | Bounded first-party record parsing |
 | `sweden-policy` | `no_std` | Executable source and operation policy |
-| `sweden-http` | `std` | Transport traits and adapters to caller-owned execution |
+| `sweden-http` | `no_std` | Sans-I/O blocking/async transport contracts and bounded sinks |
 | `sweden-testkit` | `std` | Deterministic mock, replay, mutation, and fixture support |
 | `sweden-schema` | `std` | Offline deterministic schema processing |
 | `sweden-*` agency crates | `no_std`/`alloc` | Source-owned operation and payload semantics |
@@ -165,6 +208,7 @@ Initial crate-introduction schedule:
 | `0.19.0` | `sweden-testkit` |
 | `0.20.0` | `sweden-schema` |
 | `0.22.0` | `sweden-trafikverket` |
+| `0.51.0` | `sweden-codec-csv` only if the dedicated boundary is justified |
 | Post-`1.0.0` | Remaining named agency crates on their own tracks |
 
 The facade crate is the repository release clock: `sweden` always equals the
@@ -184,11 +228,15 @@ typed agency operation
         ↓
 closed source + operation identifier
         ↓
-executable policy preflight
+operation policy + dossier evidence preflight
         ↓
 credential-free canonical request plan
         ↓
-caller-owned transport and late credential injection
+private consumable policy/rate permit
+        ↓
+late credential injection into a reviewed execution sink
+        ↓
+trusted caller-owned transport boundary
         ↓
 bounded body sink
         ↓
@@ -200,6 +248,15 @@ provenance-wrapped result
 The API must make it impossible to select an arbitrary production origin.
 Credentials are inserted only after the origin is validated and are excluded
 from debug output, cache keys, canonical hashes, errors, and fixtures.
+Permits are non-`Copy`, non-`Clone`, operation-, environment-, and
+origin-bound, and consumed by execution. Retries, redirects, and subsequent
+pages require fresh charges or permits.
+
+A caller-owned transport can still copy credentials, ignore deadlines, choose
+another destination, or log data. Sweden does not claim to sandbox arbitrary
+trait implementations. DNS, TLS, proxy, and network-egress enforcement are
+adapter and deployment responsibilities; stronger isolation requires a
+separate process boundary.
 
 ## 5. Source Onboarding
 
@@ -208,16 +265,23 @@ source dossier:
 
 1. Confirm official owner, documentation, origins, versions, support channel,
    terms, licence, attribution, and change policy.
-2. Classify each operation by access, hosted use, personal-data risk, caching,
-   transformation, redistribution, authentication, and rate limits.
-3. Pin official schema/specification inputs with retrieval metadata and hashes.
-4. Define explicit request, response, collection, retry, and time budgets.
-5. Build synthetic fixtures before admitting redistributable official
+2. Pin retrieval time, content digest, reviewer, review expiry, and explicit
+   exclusions for every evidence source.
+3. Classify each operation—not merely the agency—by environment, origin,
+   method, path, redirects, authentication, hosted use, personal-data risk,
+   caching, transformation, redistribution, attribution, rate, concurrency,
+   retry, and pagination rules.
+4. Pin official schema/specification inputs with retrieval metadata and hashes.
+5. Define explicit request, response, collection, retry, redirect, allocation,
+   and time budgets.
+6. Build synthetic fixtures before admitting redistributable official
    fixtures.
-6. Implement request goldens and negative parser tests before live execution.
-7. Add opt-in low-rate live tests only when the source permits them.
-8. Generate documentation from the same reviewed operation metadata.
-9. Stop for maintainer pentest and keep the versioned repository report current.
+7. Implement generated policy contradiction tests, request goldens, and
+   negative parser tests before live execution.
+8. Add opt-in low-rate live tests only when the source permits them.
+9. Generate documentation from the same reviewed operation metadata.
+10. Stop for maintainer pentest and keep the versioned repository report
+    current.
 
 Policy expiry fails closed. An expired source review cannot silently continue
 hosted relaying.
@@ -230,25 +294,35 @@ general-purpose replacements for ecosystem parsers.
 JSON work is split into:
 
 - byte validation and UTF-8 boundary;
-- bounded tokenization;
-- string escape and number grammar;
-- nesting and token budgets;
-- borrowed values;
-- bounded owned values behind `alloc`;
+- bounded tokenization with exact JSON number grammar;
+- raw/decoded string ceilings, escape validation, Unicode scalar and surrogate
+  handling;
+- iterative structure with token, depth, member, element, and duplicate-key
+  policy;
+- exact consumption after trailing whitespace;
+- borrowed events with caller scratch rather than allocation merely to
+  unescape;
+- bounded owned values behind `alloc`, charged before reserve;
 - source-specific typed decoding;
 - mutation and differential fixtures generated out of process where useful.
 
 XML work is split into:
 
 - strict UTF-8/XML character validation;
-- bounded tokenization;
-- namespace handling needed by reviewed sources;
-- unconditional rejection of DTD and external/internal entity declarations;
+- bounded iterative tokenization with caller-provided stack;
+- namespace handling, exact start/end matching, and duplicate expanded
+  attribute rejection;
+- unconditional early rejection of DTD, entity declarations, and external
+  identifiers; only predefined entities and bounded numeric references are
+  admitted;
 - canonical escaping and deterministic output;
 - source-specific streaming decode.
 
-CSV and archive work are separate milestones. Unsupported constructs fail
-closed; they are never guessed.
+CSV is a separate milestone. Each operation fixes its delimiter, quoting,
+line-ending, header, blank-record, BOM, and encoding rules; no dialect is
+guessed. Spreadsheet-safe export neutralizes formula-leading `=`, `+`, `-`,
+and `@`. Archive support remains unadmitted until it receives its own bounded
+security milestone. Unsupported constructs fail closed.
 
 ## 7. Trafikverket 1.0 Track
 
@@ -280,6 +354,9 @@ objects remain explicit rather than hidden behind broad completion claims.
 
 This repository does not implement TLS. `sweden-http` defines request and
 response contracts for a transport supplied by the application or deployment.
+The crate itself remains `no_std`: traits, `core::future::Future`, structured
+plans, cancellation state, and caller-owned sinks do not require sockets or
+`std`.
 
 The transport boundary requires:
 
@@ -296,6 +373,12 @@ Because project crates cannot depend on third-party HTTP/TLS clients, concrete
 ecosystem adapters are not admitted under the current policy. Users bridge
 their maintained transport through the public trait. A future adapter requires
 an explicit dependency-policy change.
+
+Reviewed adapters must return redirects as data, disable automatic proxy
+discovery and redirects by default, avoid unmetered decompression and
+buffering, and translate adapter errors immediately into closed safe
+categories. These are conformance properties, not guarantees about arbitrary
+implementations.
 
 ## 9. Platform Plan
 
@@ -328,6 +411,14 @@ Every public behavior needs:
 - supported-toolchain checks;
 - platform checks;
 - isolated package checks.
+
+Capability checks cover:
+
+- default: no allocation, I/O, clock, randomness, credentials, or globals;
+- `alloc`: bounded ownership without implying `std`;
+- `std`: orchestration interfaces without implying networking;
+- transport/agency features: no silent allocation, credentials, proxy,
+  telemetry, filesystem, live-test, or hosted-relay activation.
 
 Parsers additionally need:
 
@@ -397,7 +488,14 @@ The granular version sequence and exact stop language live in
 - Trafikverket’s declared stable object/operation matrix is complete;
 - source terms, schema evidence, and live conformance are current;
 - there are no unbudgeted parser, body, page, retry, or time paths;
+- JSON, XML, and CSV admitted subsets have final corpus and fuzz evidence;
+- every budget is a consumable pre-charged ledger rather than passive metadata;
 - there is no arbitrary-origin or credential-leaking path;
+- caller-owned transport trust and Sweden-controlled executor guarantees are
+  documented without cryptographic-sandbox claims;
+- operation-level policy, dossier, provenance, and expiry evidence gates every
+  stable capability;
+- borrowed, `alloc`, `std`, and transport feature boundaries are verified;
 - public docs contain no unsupported production claims;
 - independent security review and maintainer pentest findings are resolved in
   the versioned repository report;

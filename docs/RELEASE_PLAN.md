@@ -1,6 +1,7 @@
 # Sweden Release Plan To 1.0
 
-Status: planning document; `v0.1.0` pentest passed; awaiting GitHub
+Status: planning document; `v0.1.0` released; next implementation milestone is
+`v0.2.0`
 
 This plan is deliberately granular. Each version is one bounded review and
 pentest pass. Split a version or add a patch release whenever its scope stops
@@ -117,7 +118,13 @@ Goal: make source, operation, schema, policy, and upstream versions explicit.
 
 Deliverables:
 
-- Validated borrowed identifiers and non-zero version wrappers.
+- Canonical syntax, length ceilings, and normalization rules for source,
+  operation, schema, policy, and upstream identifiers.
+- Validating borrowed constructors for dynamic identifiers and generated
+  closed constants for reviewed identifiers.
+- Reviewed source constants reserved for later binding to dossier/policy
+  evidence; `SourceId::reviewed` cannot remain a general assertion API.
+- Non-zero version wrappers.
 - Stable comparison and display rules without allocation.
 - Boundary and invalid-input tests.
 - Core API and crate documentation.
@@ -139,7 +146,9 @@ Goal: prevent unbounded or ambiguous scalar input at API boundaries.
 Deliverables:
 
 - Bounded strings, page sizes, byte counts, retry counts, and nesting limits.
-- Checked constructors and stable error paths.
+- Independent wire and decoded ceilings without an ordering assumption.
+- Checked counters, tighten-only ceilings, and stable exhaustion errors.
+- Separation between configured ceilings and consumable remaining state.
 - No panics or unchecked arithmetic on caller input.
 
 Verification:
@@ -179,7 +188,10 @@ Goal: represent requests without performing network activity.
 
 Deliverables:
 
-- Method, reviewed relative path, protected header slots, and bounded body plan.
+- `Operation<Input>` to credential-free `CanonicalPlan<Unauthenticated>`
+  typestate with private authorization transitions.
+- Method, reviewed structured path/query fields, protected credential slots,
+  and bounded body plan.
 - Canonical credential-free representation.
 - Explicit response and execution budgets.
 - Compile-time separation from `std`.
@@ -191,7 +203,8 @@ Verification:
 
 Exit criteria:
 
-- Agency operations can describe a bounded request without choosing transport.
+- Agency operations can describe a bounded request without choosing transport,
+  and no public constructor can mint an authorized plan or arbitrary origin.
 - `v0.5.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.6.0 - Closed Origin Registry
@@ -222,7 +235,11 @@ Goal: model access, hosted use, data class, cache, attribution, and retry rules.
 Deliverables:
 
 - Dependency-free policy enums and validated operation policy.
+- Stable predicates for non-exhaustive access/status enums so callers do not
+  encode wildcard policy logic.
 - Fail-closed `Unknown` and `ReviewRequired` states.
+- Operation-specific access, authentication, hosted-use, data-class, cache,
+  attribution, transformation, redistribution, retry, and pagination rules.
 - Contradiction checks and decision tests.
 - Policy documentation.
 
@@ -246,7 +263,8 @@ Deliverables:
 - Bounded parser with duplicate, unknown, missing, and contradictory-field
   rejection.
 - Canonical formatter and round-trip fixtures.
-- Dated review and expiry fields.
+- Official evidence references, retrieval time, content digest, reviewer,
+  expiry, schema inputs, operation inventory, and explicit exclusions.
 
 Verification:
 
@@ -255,7 +273,8 @@ Verification:
 
 Exit criteria:
 
-- Checked-in manifests compile to exactly one deterministic policy value.
+- Checked-in manifests compile to exactly one deterministic operation policy,
+  and missing dossier evidence or expiry fails closed.
 - `v0.8.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.9.0 - Provenance Envelope
@@ -267,6 +286,8 @@ Deliverables:
 - Source, operation, schema, policy, retrieval, licence, and transform metadata.
 - Raw/decoded/normalized/cache status distinctions.
 - Bounded transformation records.
+- Private evidence-bound stable capability shape tying policy, dossier digest,
+  schema version, environment, and expiry to later execution.
 - Provenance equality and serialization test vectors.
 
 Verification:
@@ -279,23 +300,26 @@ Exit criteria:
 - Every future successful operation can carry complete source provenance.
 - `v0.9.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.10.0 - Blocking Transport Contract
+## v0.10.0 - `no_std` Transport Contract
 
-Goal: stabilize a caller-supplied synchronous execution boundary.
+Goal: create a portable sans-I/O request/response boundary before execution
+styles are layered on it.
 
 Deliverables:
 
 - Create and publish the focused `sweden-http` crate.
+- `#![no_std]` contract crate with no heap, socket, timer, executor, runtime,
+  filesystem, environment, DNS, or TLS dependency.
 - Credential-free request input, bounded response sink, safe metadata, and
   transport error contract.
-- Deadline, redirect, and cancellation semantics.
-- Deterministic recording mock.
+- Redirect-as-data, cancellation-state, and backpressure contracts.
 - No concrete HTTP or TLS implementation.
 
 Verification:
 
 - Inherited gate plus timeout, truncation, redirect, over-budget, and partial
   response tests.
+- Compile checks proving the contract works without `std` or allocation.
 - Confirm `sweden-core` does not depend outward and the facade does not enable
   transport behavior by default.
 
@@ -304,13 +328,15 @@ Exit criteria:
 - A mock can execute a plan without creating an arbitrary network path.
 - `v0.10.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.11.0 - Async Transport Contract
+## v0.11.0 - Blocking And Async Transport Traits
 
-Goal: support asynchronous transports without a runtime dependency.
+Goal: support synchronous and asynchronous caller transports without a runtime
+dependency.
 
 Deliverables:
 
-- Standard `Future`-based trait boundary and explicit cancellation semantics.
+- Blocking trait plus standard `Future`-based trait boundary and explicit
+  cancellation semantics.
 - Borrowed body sink and backpressure contract.
 - Runtime-neutral async mock.
 - Blocking/async semantic parity table.
@@ -331,11 +357,12 @@ Goal: account for bytes before any untrusted response is decoded.
 
 Deliverables:
 
-- Wire/decoded byte counters, chunk sink, completion state, and truncation
-  detection.
+- Independent wire/decoded consumable ledgers, chunk sink, completion state,
+  and truncation detection.
 - Content-length and decompression-plan policy.
 - Backpressure and abort results.
 - Fault-injection test support.
+- Pre-charge before chunk acceptance or decoded-fragment exposure.
 
 Verification:
 
@@ -344,7 +371,8 @@ Verification:
 
 Exit criteria:
 
-- No decoder can receive bytes that bypass the declared response budget.
+- No decoder can receive bytes that bypass the declared response budget, and
+  wire and decoded ceilings remain independently configurable.
 - `v0.12.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.13.0 - JSON Lexical Layer
@@ -353,8 +381,11 @@ Goal: tokenize the reviewed JSON subset under strict budgets.
 
 Deliverables:
 
-- First-party UTF-8, string escape, number, literal, and punctuation scanner.
-- Token, string, and byte limits.
+- First-party UTF-8, string escape, exact JSON number, literal, and punctuation
+  scanner.
+- Independent raw-string, decoded-string, token, and byte limits.
+- Unicode scalar validation, including surrogate-pair handling and rejection
+  of isolated surrogates.
 - Stable lexical errors with safe offsets.
 - No allocation in borrowed mode.
 
@@ -374,9 +405,11 @@ Goal: parse bounded JSON structure without recursion hazards.
 
 Deliverables:
 
-- Explicit-stack object/array parser with depth and member limits.
-- Duplicate-key policy and exact-consumption mode.
-- Borrowed event stream.
+- Iterative object/array parser using a caller-provided stack with depth,
+  member, element, and total-token limits.
+- Operation-selected duplicate-key policy that rejects duplicates by default.
+- Exact consumption after permitted trailing whitespace.
+- Borrowed event stream with caller scratch for decoded strings.
 - Source-decoder hooks.
 
 Verification:
@@ -395,9 +428,10 @@ Goal: add bounded owned JSON only for callers that opt into allocation.
 
 Deliverables:
 
-- `alloc`-gated strings, arrays, and maps with pre-allocation checks.
+- `alloc`-gated strings, arrays, and maps with checked pre-charge before every
+  reserve or growth.
 - Configurable unknown-field capture.
-- Allocation failure and total-owned-byte errors.
+- Allocation failure, logical-owned-byte, and cumulative-allocation errors.
 - Borrowed/owned parity tests.
 
 Verification:
@@ -417,7 +451,9 @@ Goal: tokenize the XML subset required by Trafikverket without entity risk.
 Deliverables:
 
 - Bounded element, attribute, text, comment, and declaration scanning.
-- Unconditional DTD and entity-declaration rejection.
+- Early unconditional rejection of `DOCTYPE`, internal subsets, entity
+  declarations, and external identifiers before any subset is scanned.
+- Only the five predefined entities and bounded numeric character references.
 - XML character and UTF-8 validation.
 - Namespace token representation.
 
@@ -437,9 +473,10 @@ Goal: provide streaming, bounded XML element processing.
 
 Deliverables:
 
-- Explicit-stack start/end matching and namespace scope.
+- Iterative start/end matching with caller-provided stack and namespace scope.
 - Depth, attribute, text, and token limits.
-- Exact-consumption and duplicate singleton policy.
+- Exact expanded-name matching, duplicate expanded-attribute rejection,
+  exact-consumption, and duplicate singleton policy.
 - Borrowed event interface.
 
 Verification:
@@ -461,6 +498,7 @@ Deliverables:
 - Bounded element/attribute/text writer with correct escaping.
 - Canonical ordering rules and invalid-character rejection.
 - Secret placeholder separation.
+- Checked output pre-charge before any write, including escaped expansion.
 - Golden byte fixtures.
 
 Verification:
@@ -482,6 +520,8 @@ Deliverables:
 - Create and publish the focused `sweden-testkit` crate.
 - Mock transport, scripted faults, bounded recording, replay metadata, and
   secret/header allowlists.
+- Fail-closed recording for unknown header classes and transport conformance
+  fixtures for redirect, proxy, decompression, cancellation, and truncation.
 - Synthetic fixture builder.
 - First-party deterministic mutation runner.
 
@@ -502,9 +542,12 @@ Goal: turn reviewed operation metadata into code, policy, docs, and tests.
 Deliverables:
 
 - Create and publish the offline `sweden-schema` tool crate.
-- Deterministic source/operation registry generation.
+- Deterministic source/operation registry, closed identifier constant,
+  capability, documentation, and contradiction-test generation.
 - Manifest hashes and generated-file headers.
 - Fail-closed scaffold for a new agency.
+- Generated crate-introduction and phase data checked against the release and
+  version plans.
 
 Verification:
 
@@ -527,7 +570,8 @@ Deliverables:
   stale-policy operations.
 - Blocking and async mock execution.
 - JSON and XML fixture paths.
-- Generated docs and policy tests.
+- Generated docs, policy tests, expiry tests, permit-consumption tests, and a
+  deliberately non-conforming trusted-transport demonstration.
 
 Verification:
 
@@ -548,10 +592,12 @@ Deliverables:
 - Create and publish the initial dependency-free, `no_std`
   `sweden-trafikverket` crate.
 - Official documentation, terms, origins, access, licence, rate, attribution,
-  privacy, and support inventory.
+  privacy, and support inventory per candidate operation.
 - Retrieval dates, content hashes, review expiry, and responsible reviewer.
-- Operation/object inventory with explicit exclusions.
-- Hosted-use decision for each candidate operation.
+- Operation/object inventory with explicit exclusions and schema/spec inputs.
+- Authentication, redirect, retry, pagination, cache, transformation,
+  redistribution, hosted-use, and data-class decisions for each candidate
+  operation.
 
 Verification:
 
@@ -570,9 +616,11 @@ Goal: separate origins and credentials before any request can execute.
 Deliverables:
 
 - Test/production environment types and closed origins.
-- Late API-key injection contract.
+- Late API-key injection into a narrow Sweden-controlled execution sink.
 - Credential-free canonical request and cache identity.
-- Redaction and wrong-origin negative tests.
+- Redaction, full-URL exclusion, and wrong-origin negative tests.
+- Explicit trust statement for caller transports and deployment-owned DNS,
+  TLS, proxy, logging, and egress controls.
 
 Verification:
 
@@ -581,7 +629,9 @@ Verification:
 
 Exit criteria:
 
-- A credential can be sent only to its reviewed environment and source.
+- Sweden-controlled execution can send a credential only to its reviewed
+  environment and source; arbitrary caller transports remain trusted and are
+  never described as sandboxed.
 - `v0.23.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.24.0 - Trafikverket Raw Reviewed Operation
@@ -592,6 +642,8 @@ Deliverables:
 
 - One registered operation ID and request/response policy.
 - Typed inputs, canonical XML, strict response envelope, and synthetic fixture.
+- Non-cloneable capability and execution permit bound to the operation,
+  environment, origin, policy/dossier/schema digests, and review expiry.
 - Mock execution and opt-in official conformance command.
 - Explicit experimental status.
 
@@ -675,10 +727,12 @@ Goal: prevent accidental unbounded result collection.
 
 Deliverables:
 
-- Page request/cursor types and explicit collection budget.
-- Page, record, byte, and elapsed limits.
+- Page request/cursor types and an explicit consumable collection ledger.
+- Page, record, wire-byte, decoded-byte, retry, allocation, and overall
+  deadline limits charged before work.
 - Streaming-first iteration contract.
-- Resume and early-stop behavior.
+- Resume and early-stop behavior, unchanged-cursor rejection, and bounded
+  cursor-cycle detection.
 
 Verification:
 
@@ -843,7 +897,8 @@ Goal: model reviewed incremental-update semantics without exactly-once claims.
 Deliverables:
 
 - Opaque source/environment/object-scoped checkpoint.
-- Commit-after-processing flow, resume, deduplication guidance, and invalidation.
+- Commit-after-successful-downstream-processing flow, resume, deduplication
+  guidance, and invalidation.
 - At-least-once contract.
 - Crash/restart fixtures.
 
@@ -866,6 +921,11 @@ Deliverables:
 - Minimum interval, fixed window, token budget, concurrency, and daily cap
   semantics required by reviewed operations.
 - Idempotency-aware retries, `Retry-After`, jitter input, and total deadline.
+- Non-cloneable rate/retry permits charged before each attempt and keyed by
+  source, operation, environment, origin, credential/tenant partition, and
+  reviewed policy revision.
+- Caller-injected trusted monotonic clock and explicit statement that an
+  in-process limiter cannot coordinate a shared quota across processes.
 - Fail-closed limiter failure policy.
 
 Verification:
@@ -884,8 +944,8 @@ Goal: represent cache decisions without violating source terms.
 
 Deliverables:
 
-- Policy-versioned non-secret keys, raw/derived distinction, freshness modes,
-  and purge dimensions.
+- Policy-versioned non-secret keys, raw/derived distinction,
+  `Fresh`/`StaleWithin`/`CacheOnly` modes, and purge dimensions.
 - Tenant partition input reserved from day one.
 - Provenance preservation across hits.
 - Prohibited-cache tests.
@@ -908,8 +968,11 @@ Deliverables:
 
 - Blocking, async, custom transport, streaming, provenance, error, and mock
   examples.
+- One common typed `Operation::plan` path; optional `.send()` and `.collect()`
+  methods remain thin orchestration over explicit transport and budget inputs.
 - Public naming and feature review.
-- No hidden global client or implicit network behavior.
+- No generic HTTP surface, hidden global client, implicit runtime, implicit
+  paging, implicit retry, or implicit network behavior.
 - Semver surface report.
 
 Verification:
@@ -929,7 +992,10 @@ Goal: prove portable crate boundaries before the API freezes.
 Deliverables:
 
 - Linux, Windows, macOS, FreeBSD, Android, and iOS compile evidence.
-- Platform capability table and adapter error semantics.
+- Explicit default/`alloc`/`std`/transport/agency capability table and adapter
+  error semantics.
+- Default facade features that do not silently enable allocation, networking,
+  credentials, proxy discovery, telemetry, live tests, or hosted relaying.
 - Endianness, pointer-width, time, path, and line-ending review.
 - Aesynx future-adapter design note without unfinished integration.
 
@@ -951,7 +1017,10 @@ Deliverables:
 
 - Parser, encoder, streaming, request-plan, and model-size benchmarks.
 - Stack and allocation measurements.
-- Worst-case budget documentation.
+- Worst-case budget documentation, including maximum bytes, attempts, pages,
+  records, allocation, and work per operation.
+- Low-bandwidth and intermittent-connectivity profiles suitable for
+  automotive and mobile integration review.
 - Regression thresholds using first-party harnesses.
 
 Verification:
@@ -995,7 +1064,8 @@ Deliverables:
   tables.
 - Compile-tested examples and migration policy.
 - Current source dossier hashes.
-- Claim/implementation cross-check.
+- Claim/implementation cross-check, including crate-introduction versions,
+  feature tiers, roadmap phases, and post-1.0 agency scope.
 
 Verification:
 
@@ -1016,6 +1086,8 @@ Deliverables:
 - Dependency-order package script and package-content allowlists.
 - README/licence/source inclusion checks.
 - No undeclared path-only or GitHub-only crate.
+- Metadata-driven workspace discovery so validation does not remain hard-coded
+  to the initial two crates.
 - Publish rollback and owner checklist.
 
 Verification:
@@ -1144,6 +1216,9 @@ Deliverables:
 - Updated threat model, attack-surface inventory, abuse cases, and control map.
 - SSRF, parser, secret, tenant, policy drift, rate, cache, supply-chain, and
   release reviews.
+- Explicit trust-boundary review separating Sweden-controlled validation from
+  arbitrary transport, DNS, TLS, proxy, clock, credential-store, and
+  deployment behavior.
 - Independent review report and tracked remediation.
 - Unsafe/dependency attestation.
 
@@ -1155,6 +1230,237 @@ Exit criteria:
 
 - No critical/high finding remains and medium findings have explicit treatment.
 - `v0.50.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.51.0 - Bounded CSV Codec
+
+Goal: admit only explicit CSV dialects required by reviewed operations.
+
+Deliverables:
+
+- Streaming first-party parser with operation-fixed delimiter, quote,
+  line-ending, header, blank-record, BOM, and encoding rules.
+- Field, row, record, byte, and allocation ledgers with exact consumption.
+- Deterministic writer and spreadsheet-safe export that neutralizes
+  formula-leading `=`, `+`, `-`, and `@`.
+- A separate `sweden-codec-csv` crate only if the boundary audit shows that
+  keeping the implementation in an existing crate would weaken reviewability.
+
+Verification:
+
+- Inherited gate plus malformed quotes, mixed line endings, oversized fields,
+  excess records, dialect confusion, formula injection, and mutation corpus.
+- Isolated `no_std`, optional `alloc`, and package checks for a new crate if
+  introduced.
+
+Exit criteria:
+
+- No input can select or guess a dialect, exceed a ledger, or produce an
+  unsafe spreadsheet cell through the safe export path.
+- `v0.51.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.52.0 - Consumable Resource Ledger Audit
+
+Goal: prove that configured ceilings become one-way consumed state at every
+untrusted boundary.
+
+Deliverables:
+
+- Control map covering transport, wire/decoded body, parsing, allocation,
+  retries, redirects, pages, records, collection, encoding, and checkpoints.
+- Checked pre-charge semantics, stable exhaustion errors, and tighten-only
+  public ceiling changes.
+- Non-`Copy`, non-`Clone` permits where copying would duplicate authority or
+  budget.
+- Cross-layer accounting tests proving that conversion between ledgers neither
+  refunds nor double-spends capacity.
+
+Verification:
+
+- Inherited gate plus exact-limit, one-over, overflow, cancellation,
+  partial-progress, replay, and copied-state compile-fail cases.
+
+Exit criteria:
+
+- Every resource-consuming stable path names its ledger and charges before the
+  corresponding work or authority use.
+- `v0.52.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.53.0 - Transport Trust And Conformance Audit
+
+Goal: state and test the exact guarantees at the caller-owned transport
+boundary.
+
+Deliverables:
+
+- Public trust statement: arbitrary transports are trusted components and are
+  not sandboxed by trait design.
+- Reviewed-adapter conformance suite for closed origin, redirect-as-data,
+  disabled automatic proxy behavior, bounded decompression, cancellation,
+  timeout, redaction, and error translation.
+- Deployment checklist for DNS, TLS, certificates, proxy, egress, logging,
+  clock, and credential-store controls.
+- Separate guarantee tables for Sweden-controlled executors, conforming
+  adapters, and arbitrary caller implementations.
+
+Verification:
+
+- Inherited gate plus intentionally malicious/non-conforming transport tests
+  demonstrating the boundary of the guarantee without weakening planner
+  validation.
+
+Exit criteria:
+
+- Documentation and types make no cryptographic isolation claim that a caller
+  transport or deployment can invalidate.
+- `v0.53.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.54.0 - Evidence-Bound Stable Capabilities
+
+Goal: prevent descriptive status or stale evidence from authorizing execution.
+
+Deliverables:
+
+- Generated private capability bound to source, operation, environment,
+  origin, policy digest, dossier digest, schema version, and review expiry.
+- Non-cloneable execution permit consumed by the reviewed execution path.
+- Fail-closed invalidation when any bound evidence changes or expires.
+- `IntegrationStatus` retained only as descriptive metadata.
+
+Verification:
+
+- Inherited gate plus stale digest, wrong operation, wrong environment, expiry,
+  schema drift, forged status, and permit-reuse tests.
+
+Exit criteria:
+
+- Stable execution authority can arise only from current reviewed evidence and
+  cannot be minted through a general public constructor.
+- `v0.54.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.55.0 - Capability-Tier Isolation
+
+Goal: prove every feature tier adds only its declared capability.
+
+Deliverables:
+
+- Audited default, `alloc`, `std`, transport, agency, test, live-test, and
+  hosted feature matrix.
+- Compile guards against accidental sockets, filesystem, environment, runtime,
+  proxy, telemetry, or credential behavior in lower tiers.
+- Additive feature and facade propagation rules with no hidden default
+  activation.
+- Independent minimal examples for each supported tier.
+
+Verification:
+
+- Inherited gate plus powerset-oriented feature checks, isolated packages,
+  `no_std` targets, and default-feature capability assertions.
+
+Exit criteria:
+
+- Enabling a lower capability tier cannot silently activate a higher one.
+- `v0.55.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.56.0 - Sans-I/O And Low-Bandwidth Qualification
+
+Goal: make constrained, mobile, and intermittent integrations predictable.
+
+Deliverables:
+
+- Caller-owned scratch and buffer sizing guidance for borrowed parsers and
+  bounded sinks.
+- Per-operation maximum bytes, attempts, redirects, pages, records,
+  allocations, and elapsed-work profiles.
+- Pause, resume, cancellation, checkpoint, and partial-delivery semantics with
+  no implicit retry or paging.
+- Automotive/mobile integration note that remains portable to future Aesynx
+  support without importing an OS assumption.
+
+Verification:
+
+- Inherited gate plus tiny-buffer, short-write, interruption, resume,
+  cancellation, and low-bandwidth deterministic simulations.
+
+Exit criteria:
+
+- A caller can determine worst-case local and network work before execution.
+- `v0.56.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.57.0 - Orchestration Ergonomics
+
+Goal: improve common use without creating a second unsafe execution path.
+
+Deliverables:
+
+- One typed `Operation::plan` primitive shared by blocking, async, mock, and
+  custom transports.
+- Optional `.send()` and `.collect()` helpers that only orchestrate explicit
+  transport, credential sink, clock, and budget inputs.
+- Typed response access to provenance, freshness, transformation, and source
+  error state.
+- Compile-tested direct, streaming, constrained, and custom-transport examples.
+
+Verification:
+
+- Inherited gate plus API equivalence, hidden-I/O, hidden-retry,
+  hidden-allocation, and unbudgeted-collection reviews.
+
+Exit criteria:
+
+- The convenient path is the same reviewed path and exposes every authority or
+  resource input that affects security.
+- `v0.57.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.58.0 - Adapter And Binding Admission Boundary
+
+Goal: resolve ecosystem integration expectations without weakening the
+dependency, unsafe-code, or trust policies.
+
+Deliverables:
+
+- Audited caller-bridge examples for maintained external HTTP/TLS stacks.
+- Decision record confirming that concrete ecosystem adapters and mobile FFI
+  bindings remain outside 1.0 under the current zero-third-party and
+  safe-Rust rules.
+- Explicit future admission criteria for any dependency, unsafe block, FFI
+  surface, platform credential store, or background runtime.
+- Documentation that avoids zero-boilerplate or official-adapter claims the
+  repository does not implement.
+
+Verification:
+
+- Inherited gate plus example compilation, dependency-tree attestation,
+  unsafe-code scan, and trust-claim review.
+
+Exit criteria:
+
+- Users have an honest integration path and no unreviewed adapter or binding is
+  smuggled into the 1.0 scope.
+- `v0.58.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.59.0 - Pre-Legal Completeness Gate
+
+Goal: close technical and evidence gaps before legal/privacy readiness begins.
+
+Deliverables:
+
+- Operation-by-operation matrix linking code, policy, dossier, schema,
+  fixtures, resource ledgers, feature tier, documentation, and review expiry.
+- Explicit unsupported and deferred inventory, including archive formats,
+  dependencies, FFI, concrete network adapters, and post-1.0 agencies.
+- Current contradiction tests and plan/metadata consistency report.
+- Remediation list with no silent carry-over into legal review.
+
+Verification:
+
+- Inherited gate plus generated-matrix reproducibility and deliberate
+  missing/stale/contradictory-entry failures.
+
+Exit criteria:
+
+- Every admitted operation has complete technical evidence and every missing
+  capability is explicitly deferred.
+- `v0.59.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.60.0 - Legal And Privacy Readiness
 
@@ -1238,24 +1544,197 @@ Exit criteria:
 - The exact candidate is suitable for independent final assessment.
 - `v0.90.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
-## v0.95.0 - Release Candidate Remediation
+## v0.91.0 - Cross-Topology Quota Simulation
 
-Goal: resolve RC1 findings without expanding the frozen product.
+Goal: validate rate, retry, cache, and hosted/direct policy across realistic
+execution topologies.
 
 Deliverables:
 
-- RC1 fixes, regression tests, refreshed docs/evidence, and compatibility report.
+- Deterministic single-process, multi-process, multi-tenant, outage, and clock
+  anomaly simulations.
+- Evidence distinguishing local advisory limiting from coordinated shared
+  quota enforcement.
+- Retry amplification, cache stampede, cancellation, and kill-switch
+  regression scenarios.
+- Updated deployment and capacity assumptions.
+
+Verification:
+
+- Inherited gate plus repeated seeded simulations proving source and tenant
+  ceilings are never exceeded by reviewed hosted execution.
+
+Exit criteria:
+
+- Every supported topology states where coordination lives and fails closed
+  when required coordination is unavailable.
+- `v0.91.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.92.0 - Final JSON Fuzz Campaign
+
+Goal: independently harden the frozen JSON lexical, structural, and typed
+decode paths.
+
+Deliverables:
+
+- Final seed corpora for tokenization, Unicode, numbers, nesting, duplicates,
+  owned values, and source envelopes.
+- Extended mutation and out-of-process fuzz campaign with minimized
+  regressions committed.
+- Resource-exhaustion, parser-agreement, and panic review.
+- Exact tool versions, commands, duration, and corpus hashes recorded.
+
+Verification:
+
+- Inherited gate plus full corpus replay on MSRV and pinned stable with no
+  unresolved crash, panic, hang, or budget bypass.
+
+Exit criteria:
+
+- The frozen JSON surface has current reproducible adversarial evidence.
+- `v0.92.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.93.0 - Final XML And CSV Fuzz Campaign
+
+Goal: independently harden the frozen XML and admitted CSV paths.
+
+Deliverables:
+
+- XML corpora for declarations, DTD/entity rejection, namespaces, expanded
+  attributes, character references, matching, and budgets.
+- CSV corpora for each admitted dialect, quoting, line endings, encoding,
+  formula-leading output, records, and budgets.
+- Extended mutation and out-of-process fuzz campaigns with minimized
+  regressions committed.
+- Exact tool versions, commands, duration, and corpus hashes recorded.
+
+Verification:
+
+- Inherited gate plus full corpus replay on MSRV and pinned stable with no
+  unresolved crash, panic, hang, expansion, ambiguity, or budget bypass.
+
+Exit criteria:
+
+- The frozen XML and CSV surfaces have current reproducible adversarial
+  evidence.
+- `v0.93.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.94.0 - Cross-Platform Resource Qualification
+
+Goal: confirm frozen limits and behavior on every day-one platform class.
+
+Deliverables:
+
+- Linux, Windows, macOS, FreeBSD, Android, and iOS compile/test evidence
+  appropriate to each crate.
+- MSRV and pinned-stable stack, allocation, binary-size, and throughput
+  measurements for representative bounded paths.
+- Low-memory, low-bandwidth, cancellation, endianness, pointer-width, and
+  line-ending regression evidence.
+- Updated platform capability and unsupported tables.
+
+Verification:
+
+- Inherited gate plus reproducible qualification runs and investigation of
+  every threshold regression.
+
+Exit criteria:
+
+- No documented platform depends on an unstated resource or OS assumption.
+- `v0.94.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.95.0 - Release Candidate Remediation
+
+Goal: resolve findings from an independent assessment of the exact frozen
+candidate without expanding the product.
+
+Deliverables:
+
+- Assessment scope and baseline commit, findings, fixes, regression tests,
+  refreshed docs/evidence, and compatibility report.
 - Explicit deferral of non-blocking new ideas.
 
 Verification:
 
-- Inherited gate plus every RC1 finding reproducer and full release-candidate
-  suite.
+- Inherited gate plus every assessment finding reproducer, retest evidence, and
+  full release-candidate suite.
 
 Exit criteria:
 
-- RC1 findings are resolved without unreviewed feature growth.
+- Independent findings are resolved or explicitly risk-treated without
+  unreviewed feature growth.
 - `v0.95.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.96.0 - Supply-Chain And Release Provenance Audit
+
+Goal: prove the frozen source, tools, packages, and release process are
+reproducible and reviewable.
+
+Deliverables:
+
+- CodeQL/default-analysis, dependency/unsafe attestation, tool pin, generated
+  input, source archive, and package-content evidence.
+- SBOM and provenance artifacts appropriate to the dependency-free workspace.
+- Reproducible package hashes and dependency-order publication rehearsal.
+- Release-script audit proving unchanged subcrates are not selected.
+
+Verification:
+
+- Inherited gate plus clean-machine generation, isolated packaging, artifact
+  comparison, and release dry run without publishing.
+
+Exit criteria:
+
+- Every intended release artifact is traceable to reviewed source and selected
+  crate metadata.
+- `v0.96.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.97.0 - Final Source Legal And Privacy Refresh
+
+Goal: ensure no frozen operation relies on stale source, terms, licence,
+privacy, or hosted-use evidence.
+
+Deliverables:
+
+- Fresh retrievals, hashes, reviewers, expiries, schema references, terms,
+  attribution, retention, redistribution, and data-class decisions.
+- Explicit confirmation or removal of each hosted and direct-use capability.
+- Updated privacy, deletion, acceptable-use, support, and incident contacts.
+- Fail-closed test for every changed or expired decision.
+
+Verification:
+
+- Inherited gate plus operation-by-operation evidence review and deliberate
+  stale/missing/contradictory evidence failures.
+
+Exit criteria:
+
+- Every admitted operation has current technical and legal authority evidence.
+- `v0.97.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
+
+## v0.98.0 - Public Surface And Scope Freeze
+
+Goal: lock the exact public API, feature graph, stable operations, and claims
+that may enter final acceptance.
+
+Deliverables:
+
+- Rustdoc public-API snapshot, feature matrix, stable operation/object matrix,
+  unsupported inventory, and SemVer report.
+- Documentation/examples checked against the same generated metadata.
+- Confirmation that only Trafikverket is production agency scope for 1.0.
+- Change-control rule allowing only release-blocking fixes through 1.0.
+
+Verification:
+
+- Inherited gate plus API diff, feature powerset, documentation claim, package,
+  and stable-operation consistency checks.
+
+Exit criteria:
+
+- Any subsequent surface or scope change requires explicit re-review and a new
+  frozen baseline.
+- `v0.98.0 implementation stop reached. Run the maintainer pentest and update the repository report.`
 
 ## v0.99.0 - Final Acceptance
 

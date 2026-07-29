@@ -9,25 +9,56 @@ High-level phases:
 | Versions | Phase |
 | --- | --- |
 | `0.1.0` | Two-crate (`sweden-core` and `sweden`) repository, policy, CI, and documentation foundation |
-| `0.2.0..=0.12.0` | Shared types, executable policy, provenance, transport, and body limits |
+| `0.2.0..=0.9.0` | Identifiers, bounded types, request planning, executable operation policy, evidence, and provenance |
+| `0.10.0..=0.12.0` | Dependency-free `no_std` transport contracts and consumable body ledgers |
 | `0.13.0..=0.18.0` | Dependency-free bounded JSON/XML codecs |
 | `0.19.0..=0.21.0` | Testkit, offline source compiler, and synthetic conformance |
 | `0.22.0..=0.36.0` | Trafikverket dossier, query model, generated slices, and checkpoints |
 | `0.37.0..=0.44.0` | Rate/cache policy, ergonomics, platforms, fuzzing, docs, packaging |
 | `0.45.0..=0.49.0` | Optional hosted service boundaries and tenant-safe operations |
 | `0.50.0` | Full security architecture review |
+| `0.51.0..=0.59.0` | CSV, ledger/trust/capability audits, feature isolation, constrained-device qualification, ergonomics, and completeness |
 | `0.60.0` | Legal and privacy readiness |
 | `0.70.0` | Reliability and recovery |
 | `0.80.0` | Limited public beta |
-| `0.90.0..=0.99.0` | API freeze, remediation, and final acceptance |
+| `0.90.0` | First frozen release candidate |
+| `0.91.0..=0.94.0` | Cross-topology simulation, final codec fuzzing, and platform/resource qualification |
+| `0.95.0` | Independent-assessment remediation |
+| `0.96.0..=0.98.0` | Supply-chain/source refresh and exact public-surface freeze |
+| `0.99.0` | Final acceptance |
 | `1.0.0-rc.1` | Exact production candidate |
 | `1.0.0` | Serious production release for documented scope |
+
+## Gap-Analysis Integration Map
+
+The post-`0.1.0` gap analysis strengthened the existing sequence; it did not
+replace the established product scope, crate policy, or release gate.
+
+| Accepted concern | Versions that establish it | Later proof point |
+| --- | --- | --- |
+| Closed identifiers and operation-specific policy | `0.2.0`, `0.7.0..=0.9.0` | `0.20.0`, `0.54.0`, `0.59.0` |
+| Consumable pre-charged resource ledgers | `0.3.0`, `0.12.0`, parser and paging milestones | `0.52.0`, `0.56.0`, `0.94.0` |
+| `no_std` sans-I/O transport contract | `0.10.0..=0.12.0` | `0.53.0`, `0.55.0`, `0.58.0` |
+| Strict first-party JSON/XML/CSV subsets | `0.13.0..=0.18.0`, `0.51.0` | `0.92.0`, `0.93.0` |
+| Evidence-bound expiring capabilities and permits | `0.8.0`, `0.9.0`, `0.22.0..=0.24.0` | `0.54.0`, `0.59.0`, `0.97.0` |
+| Honest trusted-transport boundary | `0.10.0`, `0.21.0`, `0.23.0` | `0.53.0`, `0.58.0` |
+| Explicit default/`alloc`/`std`/transport tiers | all crate introductions and `0.40.0` | `0.55.0`, `0.98.0` |
+| Mobile, automotive, and future Aesynx portability | `0.40.0`, `0.41.0` | `0.56.0`, `0.94.0` |
+| Metadata-driven modularity and claim checking | `0.20.0`, `0.43.0`, `0.44.0` | `0.59.0`, `0.98.0` |
+| Independent final assurance | per-version maintainer pentest from day one | `0.91.0..=0.99.0`, `1.0.0-rc.1` |
+
+Two recommendations were deliberately not accepted as roadmap replacements:
+Trafikverket remains the only production agency before 1.0, and concrete
+third-party HTTP/TLS adapters or unsafe FFI bindings remain outside 1.0 unless
+the project explicitly changes its zero-third-party or safe-Rust policy.
 
 Crates enter the workspace only when implementation starts; no empty
 placeholder package is published. The first additions are `sweden-http` in
 `0.10.0`, `sweden-testkit` in `0.19.0`, `sweden-schema` in `0.20.0`, and
-`sweden-trafikverket` in `0.22.0`. Other named agency crates begin after
-`1.0.0` on their independent stabilization tracks.
+`sweden-trafikverket` in `0.22.0`. A focused `sweden-codec-csv` may enter at
+`0.51.0` only if its boundary audit justifies a separate crate; otherwise the
+reviewed CSV subset stays in an existing focused crate. Other named agency
+crates begin after `1.0.0` on their independent stabilization tracks.
 
 The repository version is the `sweden` facade version and the `vX.Y.Z` tag.
 Subcrates advance independently only when required, as tracked in
@@ -37,3 +68,8 @@ then present converges to `1.0.0`.
 Patch releases may be inserted at any point and inherit the same gates. A
 version number is a review boundary, never a deadline or permission to merge
 unfinished work.
+
+`RELEASE_PLAN.md` is authoritative when a summary and a detailed milestone
+ever diverge. Each milestone retains the same simple stop: implementation and
+report baseline, maintainer pentest, report/fix commit, GitHub green, then an
+explicit maintainer request to tag.
