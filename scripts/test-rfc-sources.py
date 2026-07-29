@@ -4,8 +4,12 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import shutil
+import stat
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -54,6 +58,35 @@ def main() -> None:
     assert set(sources) == REQUIRED
     assert set(checksums) == REQUIRED
     subprocess.run(["scripts/verify-rfcs.sh"], cwd=ROOT, check=True)
+
+    with tempfile.TemporaryDirectory() as directory:
+        checkout = Path(directory) / "rfc"
+        shutil.copytree(RFC, checkout)
+        protected = [checkout / "SHA256SUMS", *checkout.glob("rfc*.txt")]
+        for path in protected:
+            path.chmod(path.stat().st_mode | stat.S_IWUSR)
+
+        environment = os.environ.copy()
+        environment["RFC_ROOT"] = str(checkout)
+        subprocess.run(
+            ["scripts/verify-rfcs.sh"],
+            cwd=ROOT,
+            env=environment,
+            check=True,
+        )
+
+        first_rfc = checkout / f"rfc{min(REQUIRED)}.txt"
+        first_rfc.write_bytes(first_rfc.read_bytes() + b"\n")
+        tampered = subprocess.run(
+            ["scripts/verify-rfcs.sh"],
+            cwd=ROOT,
+            env=environment,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        assert tampered.returncode != 0
+
     print(f"RFC source baseline tests passed ({len(REQUIRED)} documents)")
 
 

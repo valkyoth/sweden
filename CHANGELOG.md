@@ -11,6 +11,12 @@ Semantic Versioning for each independently published crate.
   Internet date/time, URI, HTTP status, JSON, HTTP semantics, caching, and
   HTTP/1.1 standards used by Sweden's planned source-neutral contracts.
 
+### Fixed
+
+- RFC verification now accepts the owner-writable files produced by a fresh
+  Git checkout while retaining checksum-based tamper rejection, and shell
+  syntax checks use each script's declared `sh` or Bash interpreter.
+
 ## 0.1.0 - 2026-07-28
 
 ### Added

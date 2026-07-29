@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-test -s rfc/README.md
-test -s rfc/SOURCES
-test -s rfc/SHA256SUMS
+rfc_root="${RFC_ROOT:-rfc}"
+
+test -s "$rfc_root/README.md"
+test -s "$rfc_root/SOURCES"
+test -s "$rfc_root/SHA256SUMS"
 
 expected="$(
     sed -n 's/^[0-9a-f]\{64\}  \(rfc[0-9][0-9]*\.txt\)$/\1/p' \
-        rfc/SHA256SUMS |
+        "$rfc_root/SHA256SUMS" |
         sort
 )"
-actual="$(find rfc -maxdepth 1 -type f -name 'rfc*.txt' -printf '%f\n' | sort)"
+actual="$(
+    find "$rfc_root" -maxdepth 1 -type f -name 'rfc*.txt' \
+        -exec basename {} \; |
+        sort
+)"
 sources="$(
     sed -n \
         's/^\([0-9][0-9]*\) https:\/\/www\.rfc-editor\.org\/rfc\/rfc[0-9][0-9]*\.txt [a-z0-9-][a-z0-9-]*$/rfc\1.txt/p' \
-        rfc/SOURCES |
+        "$rfc_root/SOURCES" |
         sort
 )"
 
@@ -26,14 +32,6 @@ if [[ -z "$expected" || "$expected" != "$actual" || "$expected" != "$sources" ]]
 fi
 
 (
-    cd rfc
+    cd "$rfc_root"
     sha256sum --check --strict SHA256SUMS
 )
-
-if find rfc -maxdepth 1 -type f \
-    \( -name 'rfc*.txt' -o -name SHA256SUMS \) \
-    -perm /222 |
-    grep -q .; then
-    echo "RFC text and checksum manifest must be locally read-only" >&2
-    exit 1
-fi
