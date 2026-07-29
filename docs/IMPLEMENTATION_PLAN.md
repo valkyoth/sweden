@@ -23,13 +23,14 @@ terms, limits, provenance, and access controls.
 The 1.0 product is:
 
 - a stable `sweden-core` contract;
-- focused first-party policy and admitted codec crates;
+- focused first-party policy, registry, and admitted codec crates;
 - a transport-neutral `sweden-http` boundary;
 - a generic `sweden-executor` that owns reviewed orchestration;
 - a production-ready `sweden-trafikverket` integration;
 - a small feature-gated `sweden` facade;
-- a repeatable agency-onboarding system demonstrated by a synthetic
-  conformance source without pulling post-1.0 agencies forward;
+- a published `sweden-conformance` source package that proves repeatable
+  agency onboarding without making synthetic semantics part of the executor
+  or pulling post-1.0 agencies forward;
 - documentation and policy evidence suitable for serious production review.
 
 The `0.1.0` workspace deliberately contains only `sweden-core` and `sweden`.
@@ -57,8 +58,17 @@ its established scope or gates:
   cryptographic sandboxes; Sweden guarantees policy and origin validation only
   inside Sweden-controlled planning and reviewed executors;
 - accepted: source policy and evidence are operation-specific, expiring, and
-  produce opaque privately constructed consumable permits rather than relying
-  on an agency-wide access label or a sealed cross-crate trait;
+  produce opaque privately constructed authorized executions rather than
+  relying on an agency-wide access label or a sealed cross-crate trait;
+- accepted: `sweden-policy` contains only source-independent decision
+  algorithms and contracts; the separate `sweden-registry` owns generated
+  source/operation membership and the indivisible binding between a canonical
+  request, exact encoder/decoder/validator profile, output/provenance type,
+  limits, evidence, and finalization rules;
+- accepted: official network execution remains disabled through `v0.36.0`;
+  mock, synthetic, and redistributable offline evidence exercise earlier
+  milestones, and opt-in live execution begins only when `v0.37.0` supplies
+  the complete reviewed quota/concurrency and time semantics;
 - accepted: configured limits become checked ledgers charged before I/O,
   allocation, parsing, retry, redirect, page fetch, or checkpoint advance;
 - accepted: local ledgers and coordinated quota authority are different
@@ -109,9 +119,9 @@ user decision and its own admission milestone before any manifest change.
 
 ### 2.3 `no_std` first
 
-`sweden-core`, the root facade, source-policy types, codecs, and agency crates
-must use `#![no_std]`. Allocation becomes an explicit feature only when a
-bounded owned representation is required.
+`sweden-core`, the root facade, policy, registry, HTTP, executor, codecs,
+conformance, and agency crates must use `#![no_std]`. Allocation becomes an
+explicit feature only when a bounded owned representation is required.
 
 `std` is allowed in focused crates for:
 
@@ -131,11 +141,13 @@ inside parser, policy, authentication, agency, or facade code.
 ### 2.5 Modularity
 
 - One agency or upstream API per crate.
-- Agency crates depend only on required shared core/policy/codec crates, not on
-  one another, the executor, HTTP, or the facade.
+- Agency and conformance crates depend only on required shared
+  core/policy/codec crates, not on one another, the registry, executor, HTTP,
+  or facade.
 - The facade contains wiring and re-exports, not implementations.
 - Network adapters do not own source semantics.
-- Policy and codecs remain source-independent.
+- Policy, HTTP, and codecs remain source-independent; source-specific generated
+  registry entries live only in `sweden-registry`.
 - Every Rust source file, generated or handwritten, must never exceed 500
   lines.
 - Review splitting once a Rust file approaches 300 lines.
@@ -164,8 +176,11 @@ Five mechanisms remain distinct:
   shared upstream quotas;
 - `PolicyAuthority`: optional caller/deployment source of current revocation
   and monotonic policy-version state;
-- `ExecutionPermit`: one-use evidence that plan, policy, ledger, and required
-  quota authority agree.
+- `AuthorizedExecution<R>`: a one-use registry-created package binding the
+  exact canonical plan, registered encoder/decoder/validator profile,
+  output/provenance type, finalization rules, policy, ledger, and required
+  quota authority. The executor never accepts an authorization token alongside
+  a separately caller-selected decoder or semantic validator.
 
 A per-process limiter is described as advisory unless the dossier explicitly
 establishes that scope. Hosted or multi-process modes requiring coordinated
@@ -179,8 +194,9 @@ stable until its exact operation set, source terms, schema revision, fixtures,
 tests, security review, and pentest evidence are current.
 
 `IntegrationStatus` is descriptive only. Executable stable behavior requires a
-generated registry entry and an opaque privately constructed capability bound
-to the operation policy, dossier identity, schema version, review expiry,
+generated registry entry and an opaque privately constructed
+`AuthorizedExecution<R>` bound to the complete reviewed request/response
+profile, operation policy, dossier identity, schema version, review expiry,
 environment, and current evidence.
 
 ## 3. Workspace Architecture
@@ -193,19 +209,29 @@ sweden-core ─┬─> sweden-policy
              ├─> sweden-codec-json
              └─> sweden-codec-xml
 
-sweden-core + sweden-policy + sweden-http
-    └─> sweden-executor
-
 sweden-core + sweden-policy + sweden-codec-json + sweden-codec-xml
+    ├─> sweden-conformance
     └─> sweden-trafikverket
 
-sweden-core + sweden-executor + sweden-trafikverket
+sweden-core + sweden-policy
+    └─> sweden-registry
+
+selected agency/conformance crate
+    └─> sweden-registry matching optional feature
+
+sweden-core + sweden-policy + sweden-http + sweden-registry
+    └─> sweden-executor
+
+sweden-core + sweden-registry + sweden-executor + sweden-trafikverket
     └─> sweden
 ```
 
-The facade depends on selected crates only through feature flags. Agency crates
-use the shared core/policy/codec contracts they require but do not depend on
-`sweden-http`; they emit transport-neutral operation plans. SMHI, SCB,
+The facade aligns selected registry and agency features. Agency and conformance
+crates use shared core/policy/codec contracts but do not depend on
+`sweden-registry`, `sweden-http`, or `sweden-executor`; they emit
+transport-neutral operation plans and wire profiles. `sweden-registry` may
+depend one-way on an agency/conformance crate behind the matching feature to
+bind those concrete profiles. This preserves an acyclic graph. SMHI, SCB,
 JobTech, and Skatteverket are post-1.0 additions and therefore do not appear in
 the 1.0 graph.
 
@@ -226,9 +252,11 @@ large for one audit:
 | `sweden-codec-json` | `no_std`/`alloc` | Bounded first-party JSON tokens and decoding |
 | `sweden-codec-xml` | `no_std`/`alloc` | Bounded first-party XML without DTD/entities |
 | `sweden-codec-csv` | `no_std`/`alloc` | Bounded first-party record parsing |
-| `sweden-policy` | `no_std` | Executable source and operation policy |
+| `sweden-policy` | `no_std` | Source-independent policy evaluation and authority contracts |
+| `sweden-registry` | `no_std` | Closed generated source/operation membership and authorized execution binding |
 | `sweden-http` | `no_std` | Sans-I/O blocking/async transport contracts and bounded sinks |
 | `sweden-executor` | `no_std`/`alloc` | Generic reviewed execution and optional client orchestration |
+| `sweden-conformance` | `no_std`/`alloc` | Synthetic source operations and wire profiles for published conformance tests |
 | `sweden-testkit` | `std` | Deterministic mock, replay, mutation, and fixture support |
 | `sweden-schema` | `std` | Offline deterministic schema processing |
 | `sweden-*` agency crates | `no_std`/`alloc` | Source-owned operation and payload semantics |
@@ -243,12 +271,13 @@ Initial crate-introduction schedule:
 | --- | --- |
 | `0.1.0` | `sweden-core`, `sweden` |
 | `0.7.0` | `sweden-policy` |
+| `0.9.0` | `sweden-registry` |
 | `0.10.0` | `sweden-http` |
 | `0.13.0` | `sweden-codec-json` |
 | `0.16.0` | `sweden-codec-xml` |
 | `0.19.0` | `sweden-testkit` |
 | `0.20.0` | `sweden-schema` |
-| `0.21.0` | `sweden-executor` |
+| `0.21.0` | `sweden-executor`, `sweden-conformance` |
 | `0.22.0` | `sweden-trafikverket` |
 | `0.51.0` | `sweden-codec-csv` only if a reviewed 1.0 operation requires CSV |
 | Post-`1.0.0` | Remaining named agency crates on their own tracks |
@@ -266,16 +295,19 @@ metadata changes. At `v1.0.0`, every crate then in the workspace converges to
 | Crate | Owns | Must not own |
 | --- | --- | --- |
 | `sweden-core` | IDs, limits/ledgers, safe errors, canonical plan vocabulary, provenance | policy decisions, I/O, credentials, agency models |
-| `sweden-policy` | dossier decisions, capability/permit issuance, cache/quota requirements | transport calls, credentials, source decoding |
+| `sweden-policy` | source-independent dossier evaluation, revocation/expiry logic, cache/quota requirement contracts | source registry data, transport calls, credentials, source decoding |
+| `sweden-registry` | generated closed membership, exact profile compatibility, opaque `AuthorizedExecution<R>` construction and consumption state | generic policy algorithms, transport calls, credentials, wire implementations |
 | `sweden-http` | blocking/async transport, response sink, redirect-as-data, safe transport codes | authorization, retries, credential injection, agency semantics |
-| `sweden-executor` | authorization transitions, quota-permit consumption, late credentials, redirect/retry state machines, sink/decoder driving, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth |
+| `sweden-executor` | execution-state transitions, quota-lease consumption, late credentials, redirect/retry state machines, driving the behavior embedded in `AuthorizedExecution<R>`, `Client<T, C, Q, P, K>` | concrete HTTP/TLS, ambient discovery, source-specific wire truth, synthetic source semantics |
+| `sweden-conformance` | synthetic operations, encoders, decoders, validators, output types, and fixtures | registry authority, generic execution, production source claims |
 | Agency crate | typed operation metadata, inputs, encoding, decoding, semantic validation | authority issuance, sockets, TLS, generic execution, other agencies |
 | `sweden` | feature wiring, aliases, and re-exports | implementation logic |
 
 The executor is generic over caller transport/clock/quota/credential resources
-and agency operation/decoder contracts. Agency crates never depend on the
-executor, and the executor never depends on an agency crate; the facade or
-application composes them.
+and the registry-produced authorized execution package. Agency crates never
+depend on the registry or executor. The executor does not depend directly on
+an agency crate; registry features provide the one-way binding and the facade
+or application aligns them.
 
 ### 3.2 Cross-crate authority model
 
@@ -286,16 +318,33 @@ trust design is:
 1. `sweden-core` exposes validating descriptive IDs, canonical plan types, and
    public structural operation/decoder contracts. Downstream crates may
    implement those contracts; doing so grants no execution authority.
-2. `sweden-policy` owns a generated closed reviewed-operation registry compiled
-   from canonical manifests. Public registry keys may select an existing entry
+2. `sweden-policy` evaluates source-independent policy inputs. It owns no
+   generated source list and cannot turn a descriptive ID into authority.
+3. `sweden-registry` owns the generated closed reviewed-operation entries
+   compiled from canonical manifests. Public keys may select an existing entry
    but no downstream crate can add one.
-3. Policy evaluation validates the complete canonical plan against the entry
-   and returns a public opaque `ExecutionPermit` whose fields and constructors
-   remain private to `sweden-policy`. It is non-`Copy`, non-`Clone`, bound to
-   one plan/evidence/environment/origin/authority decision, and consumed once.
-4. `sweden-executor` accepts only a valid registry-bound permit. A custom
-   operation implementation, descriptive ID, dossier-shaped value, or plan
-   cannot bypass registry validation or mint authority.
+4. After policy evaluation, the registry validates the complete canonical plan
+   and constructs a public opaque `AuthorizedExecution<R>`. Its fields and
+   constructors remain private to `sweden-registry`; it is non-`Copy`,
+   non-`Clone`, and indivisibly binds one encoder profile and canonical plan,
+   expected status/media profile, exact registered decoder and semantic
+   validator, output/provenance type, limits, evidence, environment, origin,
+   authority decision, and finalization behavior.
+5. `sweden-executor` accepts only `AuthorizedExecution<R>` and drives the
+   behavior it embeds. It has no public path that accepts a permit plus an
+   arbitrary decoder, validator, media profile, or output type. Custom
+   operation implementations, descriptive IDs, dossier-shaped values, and
+   structurally valid plans cannot mint or substitute authority.
+
+Registry and policy compatibility is explicit. Workspace dependencies and
+facade features select one compatible `sweden-policy`/`sweden-registry` pair;
+Cargo type identity prevents packages from crossing crate versions, and
+runtime registry/policy version or digest mismatches fail closed. Adding a
+reviewed entry or feature requires a registry release. Removing an entry,
+changing security policy, or revoking evidence advances the monotonic
+registry/policy version and invalidates older authorization packages. No
+compatibility shim may translate an authorization package between registry
+versions.
 
 A hostile downstream test package attempts each forbidden construction and
 custom trait implementation. Compile-fail tests prove non-construction and
@@ -316,7 +365,9 @@ credential-free canonical request plan
         ↓
 advisory cost + reviewed maximum inspection
         ↓
-opaque consumable registry/policy/quota permit
+opaque registry-created AuthorizedExecution<R>
+binding exact encoder, decoder, validator, output,
+limits, evidence, quota lease, and finalization
         ↓
 late credential injection into a reviewed execution sink
         ↓
@@ -324,7 +375,7 @@ trusted caller-owned transport boundary
         ↓
 bounded body sink
         ↓
-source decoder and semantic validation
+bound source decoder and semantic validation
         ↓
 provenance-wrapped result
 ```
@@ -346,9 +397,10 @@ pagination abstraction erases upstream semantics.
 The API must make it impossible to select an arbitrary production origin.
 Credentials are inserted only after the origin is validated and are excluded
 from debug output, cache keys, canonical hashes, errors, and fixtures.
-Permits are non-`Copy`, non-`Clone`, operation-, environment-, and
-origin-bound, and consumed by execution. Retries, redirects, and subsequent
-pages require fresh charges or permits.
+Authorized executions and their attempt/quota leases are non-`Copy`,
+non-`Clone`, operation-, environment-, and origin-bound, and consumed by
+execution. Retries, redirects, and subsequent pages require fresh charges and
+authorization.
 
 A caller-owned transport can still copy credentials, ignore deadlines, choose
 another destination, or log data. Sweden does not claim to sandbox arbitrary
@@ -376,10 +428,12 @@ source dossier:
    fixtures.
 7. Implement generated policy contradiction tests, request goldens, and
    negative parser tests before live execution.
-8. Add opt-in low-rate live tests only when the source permits them and the
-   executor can require a one-attempt quota/concurrency permit, explicit
-   credential scope, hard response/deadline limits, and no automatic retry or
-   redirect.
+8. Keep official network execution disabled through `v0.36.0`; use mock,
+   synthetic, and legally redistributable offline fixtures during onboarding.
+   Beginning at `v0.37.0`, add opt-in low-rate live tests only when the source
+   permits them and the executor can require the complete reviewed
+   rate/window/concurrency authority, explicit credential scope, honest
+   deadline mode, and operation-approved retry/redirect behavior.
 9. Generate documentation from the same reviewed operation metadata.
 10. Stop for maintainer pentest and keep the versioned repository report
     current.
@@ -420,19 +474,26 @@ JSON work is split into:
   handling;
 - iterative structure with token, depth, member, element, work-unit, and
   duplicate-key policy;
-- bounded caller scratch for exact duplicate-key bytes, with collision-safe
-  byte comparison or bounded rescanning and explicit work-unit charging;
+- bounded caller scratch for exact decoded key scalar sequences, with
+  collision-safe comparison or bounded re-decoding and explicit work-unit
+  charging; lexical spellings such as `"a"` and `"\u0061"` are the same key;
 - exact consumption after trailing whitespace;
 - borrowed events with caller scratch rather than allocation merely to
   unescape;
-- bounded owned values behind `alloc`, charged before reserve;
+- bounded owned values behind `alloc`, charged before reserve, with separate
+  limits and observations for logical decoded bytes, requested capacity,
+  container capacity, and allocation count; allocator rounding, metadata, and
+  physical heap use remain outside the crate's hard guarantee;
 - source-specific typed decoding;
 - mutation and differential fixtures generated out of process where useful.
 
 XML work is split into:
 
-- strict UTF-8/XML character validation;
+- strict UTF-8 and XML 1.0 character validation; XML 1.1 is rejected;
 - bounded iterative tokenization with caller-provided stack;
+- explicit byte/work ceilings for names and QNames, namespace URIs, active
+  namespace bindings, comments, CDATA, processing instructions, declarations,
+  and numeric character-reference digits;
 - namespace handling, exact start/end matching, and duplicate expanded
   attribute rejection;
 - unconditional early rejection of DTD, entity declarations, and external
@@ -469,7 +530,8 @@ The implementation sequence is:
 8. Canonical bounded XML encoder.
 9. Strict response envelope and upstream error decoder.
 10. Offline deterministic model generation.
-11. Small object-family slices with fixture and live evidence.
+11. Small object-family slices with fixture and offline conformance evidence;
+    live evidence begins at `v0.37.0`.
 12. Change/checkpoint behavior where officially supported.
 13. Compatibility, performance, memory, documentation, security, and legal
     stabilization.
@@ -492,7 +554,10 @@ The transport boundary requires:
 - same-origin or explicitly reviewed redirects;
 - late credential injection;
 - response byte accounting before decode;
-- explicit deadlines and cancellation;
+- an explicit deadline mode: `TransportEnforced` when the adapter owns
+  preemption, `RuntimeRace` when the caller races execution with a timer or
+  cancellation future, or `Cooperative` when the executor can only inspect
+  time/cancellation after control returns or yields;
 - safe error categories without raw headers or URLs;
 - no automatic proxy-environment use unless the caller explicitly enables it.
 
@@ -513,6 +578,14 @@ buffering, and translate adapter errors immediately into closed safe
 categories. These are conformance properties, not guarantees about arbitrary
 implementations.
 
+A clock value alone never creates a hard deadline. A blocking transport that
+does not return and an async transport that never wakes cannot be preempted by
+the portable executor in `Cooperative` mode. Documentation, errors, tests, and
+provenance preserve the selected deadline mode; hard-deadline language is
+reserved for an adapter or runtime that actually supplies preemption.
+Never-returning conformance cases run in bounded subprocesses or under an
+external watchdog so the test suite itself cannot hang.
+
 The same trust distinction applies to all external authorities:
 
 | External boundary | Sweden-owned behavior | Conforming implementation | Arbitrary implementation |
@@ -523,6 +596,7 @@ The same trust distinction applies to all external authorities:
 | Credential provider | narrow source/environment/scope request | returns only correctly scoped credentials | may return, retain, or log secrets |
 | Cache/state store | typed directives, partitions, and bounded values | honors denial, purge, version, and collision rules | may retain forbidden/stale data |
 | Policy/kill-switch authority | version/expiry/revocation input is validated | supplies authenticated monotonic current state | may suppress revocation or roll back |
+| Allocator | logical/requested/container budgets checked where observable | documents rounding, metadata, and failure behavior | may consume more physical memory than requested |
 
 Stronger guarantees require Sweden-controlled implementations or deployment
 isolation. Traits alone do not make these authorities trustworthy.
@@ -582,8 +656,9 @@ Parsers additionally need:
 - differential evidence against independently generated fixtures when that
   does not add a project dependency.
 
-Live tests are opt-in, rate-limited, secret-safe, and never a substitute for
-deterministic fixtures.
+Live tests are prohibited through `v0.36.0`. Once admitted at `v0.37.0`, they
+are opt-in, rate-limited by the reviewed authority, secret-safe, and never a
+substitute for deterministic fixtures.
 
 ## 11. Security Work From Day One
 
